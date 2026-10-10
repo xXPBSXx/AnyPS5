@@ -274,4 +274,35 @@ int APS5_VABI scePadSetAngularVelocityBiasCorrectionState(int handle, bool enabl
  return PAD_OK;
 }
 
+int APS5_VABI scePadVrControllerSetVibration(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI scePadVrControllerSetVibrationMode(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI scePadVrControllerSetTriggerEffects(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI scePadVrControllerGetTriggerEffectState(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+int APS5_VABI scePadVrControllerReadCombinedState(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+APS5_EXPORT("n3kSX62fgNo", scePadUnknown_n3kSX62fgNo);
+int APS5_VABI scePadUnknown_n3kSX62fgNo(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 }
