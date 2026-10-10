@@ -13,4 +13,14 @@ if(BUILD_TESTING)
         set_tests_properties(guest_http2 PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceHttp2>")
     endif()
+
+    add_test_executable(guest_http2_websocket_ping_interval_tests ${LIBS_INCLUDE_DIR}/tests/GuestHttp2WebSocketPingInterval.cpp)
+    target_include_directories(guest_http2_websocket_ping_interval_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_http2_websocket_ping_interval_tests PRIVATE libSceHttp2 libc)
+    configure_windows_unwind(guest_http2_websocket_ping_interval_tests)
+    add_test(NAME guest_http2_websocket_ping_interval COMMAND guest_http2_websocket_ping_interval_tests)
+    if(WIN32)
+        set_tests_properties(guest_http2_websocket_ping_interval PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceHttp2>")
+    endif()
 endif()
