@@ -21,6 +21,9 @@ int APS5_VABI sceRudpInit_nid_postfix(void*, int);
 int APS5_VABI sceRudpActivate();
 int APS5_VABI sceRudpGetStatus(void*, std::size_t);
 int APS5_VABI sceRudpTerminate();
+int APS5_VABI sceRudpProcessEvents();
+int APS5_VABI sceRudpNetFlush();
+int APS5_VABI sceRudpGetMaxSegmentSize(std::uint16_t*);
 }
 
 static void Require(bool value) { if (!value) std::abort(); }
@@ -75,7 +78,19 @@ int main() {
     constexpr int rudpNotInitialized = static_cast<int>(0x80770001);
     Require(sceRudpGetStatus(status.data(), status.size()) == rudpNotInitialized);
     Require(status == originalStatus);
+    constexpr int rudpInvalidArgument = static_cast<int>(0x80770004);
+    std::uint16_t segmentSize = 0x5a5a;
+    Require(sceRudpProcessEvents() == rudpNotInitialized);
+    Require(sceRudpNetFlush() == rudpNotInitialized);
+    Require(sceRudpGetMaxSegmentSize(&segmentSize) == rudpNotInitialized);
+    Require(sceRudpGetMaxSegmentSize(nullptr) == rudpInvalidArgument);
+    Require(segmentSize == 0x5a5a);
     Require(sceRudpInit_nid_postfix(nullptr, 0) == 0);
+    Require(sceRudpProcessEvents() == 0);
+    Require(sceRudpNetFlush() == 0);
+    Require(sceRudpGetMaxSegmentSize(&segmentSize) == 0);
+    Require(sceRudpGetMaxSegmentSize(nullptr) == rudpInvalidArgument);
+    Require(segmentSize == 0x5a5a);
     Require(sceRudpActivate() == 0);
     Require(sceRudpGetStatus(status.data(), status.size()) == 0);
     for (unsigned char byte : status) Require(byte == 0);
