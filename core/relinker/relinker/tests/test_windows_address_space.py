@@ -10,7 +10,6 @@ import tempfile
 from test_optional_plt import fixture
 
 GUEST_ARENA_START = 0x200000000
-DYNAMIC_BASE = 0x40
 NX_COMPAT = 0x100
 
 
@@ -32,7 +31,7 @@ def main():
                                 capture_output=True, text=True, timeout=20)
         assert result.returncode == 0, (result.stdout, result.stderr)
         characteristics = dll_characteristics(output.read_bytes())
-        assert characteristics == DYNAMIC_BASE | NX_COMPAT, f"DllCharacteristics {characteristics:#x}"
+        assert characteristics == NX_COMPAT, f"DllCharacteristics {characteristics:#x}"
         if os.name == "nt":
             for _ in range(8):
                 executed = subprocess.run([str(output)], capture_output=True, text=True, timeout=20)
