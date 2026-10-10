@@ -22,4 +22,15 @@ int APS5_VABI sceVideoOutColorSettingsSetGamma_(VideoOutColorSettings* settings,
     return sceVideoOutColorSettingsSetGamma(settings, gamma);
 }
 
+int APS5_VABI sceVideoOutDeleteOutputModeEvent(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
+APS5_EXPORT("-q-vbO859Tw", sceVideoOutUnknown_q_vbO859Tw);
+int APS5_VABI sceVideoOutUnknown_q_vbO859Tw(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 }
