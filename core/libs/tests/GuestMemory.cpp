@@ -1153,6 +1153,60 @@ static void CheckFailedCollectKeepsWrites() {
 #endif
 }
 
+static void CheckHotSharedPageStopsFaulting() {
+#ifdef _WIN32
+    constexpr std::size_t page = 0x4000;
+    std::int64_t phys = 0;
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page * 2, 0, 0, &phys) == 0);
+    void* mapped = nullptr;
+    Require(sceKernelMapDirectMemory(&mapped, page * 2, 3, 0, phys, 0) == 0);
+    auto* bytes = static_cast<volatile unsigned char*>(mapped);
+    const auto collect = [&] {
+        std::array<void*, 32> pages{};
+        std::size_t count = pages.size();
+        Require(GuestArena::GuestArenaCollectWrites_nid_postfix(reinterpret_cast<std::uintptr_t>(mapped), page * 2, pages.data(), &count, true));
+        return count;
+    };
+    const auto protection = [&](std::size_t offset) {
+        MEMORY_BASIC_INFORMATION info{};
+        Require(VirtualQuery(const_cast<unsigned char*>(bytes + offset), &info, sizeof(info)) == sizeof(info));
+        return info.Protect;
+    };
+    collect();
+    for (int round = 0; round < 10; ++round) {
+        bytes[8] = static_cast<unsigned char>(round);
+        Require(collect() == 4);
+        Require(protection(0) == PAGE_READONLY && protection(page) == PAGE_READONLY);
+        Require(collect() == 0);
+    }
+    for (int round = 10; round < 300; ++round) {
+        bytes[8] = static_cast<unsigned char>(round);
+        collect();
+    }
+    Require(protection(0) == PAGE_READWRITE && protection(page) == PAGE_READONLY);
+    Require(collect() == 4);
+    Require(collect() == 4);
+    Require(protection(0) == PAGE_READWRITE);
+    bytes[page + 8] = 1;
+    Require(collect() == 8);
+    Require(sceKernelMunmap(mapped, page * 2) == 0);
+    Require(sceKernelReleaseDirectMemory(phys, page * 2) == 0);
+    Require(sceKernelAllocateDirectMemory(0, 0x7fffffffffll, page, 0, 0, &phys) == 0);
+    Require(sceKernelMapDirectMemory(&mapped, page, 3, 0, phys, 0) == 0);
+    bytes = static_cast<volatile unsigned char*>(mapped);
+    const auto collectOne = [&] {
+        std::array<void*, 32> pages{};
+        std::size_t count = pages.size();
+        Require(GuestArena::GuestArenaCollectWrites_nid_postfix(reinterpret_cast<std::uintptr_t>(mapped), page, pages.data(), &count, true));
+        return count;
+    };
+    collectOne();
+    Require(collectOne() == 0);
+    Require(sceKernelMunmap(mapped, page) == 0);
+    Require(sceKernelReleaseDirectMemory(phys, page) == 0);
+#endif
+}
+
 static void CheckPinnedSharedPages() {
 #ifdef _WIN32
     constexpr std::size_t page = 0x4000;
@@ -1721,6 +1775,7 @@ int main() {
     CheckSharedWriteTracking();
     CheckReadsIntoSharedWriteTracking();
     CheckPinnedSharedPages();
+    CheckHotSharedPageStopsFaulting();
     CheckFailedCollectKeepsWrites();
 #if defined(__linux__)
     CheckWriteWatch();

@@ -108,18 +108,7 @@ public:
 
     void Pin(std::uintptr_t address, std::size_t bytes) {
         std::lock_guard lock(mutex);
-        for (auto it = views.lower_bound(address & ~(pageBytes - 1)); it != views.end() && it->first < address + bytes; ++it) {
-            auto& page = *it->second.page;
-            ++page.pins;
-            for (const auto alias : page.aliases) {
-                auto& view = views.at(alias);
-                if (!view.armed) continue;
-                DWORD previous;
-                if (!VirtualProtect(reinterpret_cast<void*>(alias), pageBytes, view.protection, &previous)) fail("pin shared guest page writable");
-                view.armed = false;
-            }
-            invalidate(page);
-        }
+        for (auto it = views.lower_bound(address & ~(pageBytes - 1)); it != views.end() && it->first < address + bytes; ++it) pinPage(*it->second.page);
     }
 
     void Unpin(std::uintptr_t address, std::size_t bytes) {
@@ -141,6 +130,10 @@ public:
         DWORD previous;
         if (!VirtualProtect(reinterpret_cast<void*>(base), pageBytes, view.protection, &previous)) fail("resume shared memory write");
         view.armed = false;
+        if (++view.faults >= HotFaultThreshold && !view.pinnedByFaults) {
+            view.pinnedByFaults = true;
+            pinPage(*view.page);
+        }
         return true;
     }
 
@@ -292,6 +285,7 @@ private:
     }
 
     static constexpr std::size_t pageBytes = 0x4000;
+    static constexpr std::uint32_t HotFaultThreshold = 100;
     struct SharedPage {
         std::uint64_t generation = 1;
         std::vector<std::uintptr_t> aliases;
@@ -312,6 +306,8 @@ private:
         std::shared_ptr<Section> section;
         std::uint64_t offset;
         std::uint32_t hostWrites;
+        std::uint32_t faults = 0;
+        bool pinnedByFaults = false;
     };
     void forgetClean(std::uintptr_t start, std::uintptr_t end) {
         auto it = cleanRanges.lower_bound(start);
@@ -334,6 +330,18 @@ private:
             it = cleanRanges.erase(it);
         }
         cleanRanges.emplace(start, end);
+    }
+
+    void pinPage(SharedPage& page) {
+        ++page.pins;
+        for (const auto alias : page.aliases) {
+            auto& view = views.at(alias);
+            if (!view.armed) continue;
+            DWORD previous;
+            if (!VirtualProtect(reinterpret_cast<void*>(alias), pageBytes, view.protection, &previous)) fail("pin shared guest page writable");
+            view.armed = false;
+        }
+        invalidate(page);
     }
 
     void invalidate(SharedPage& page) {
@@ -407,6 +415,7 @@ private:
                 if (!unmap(GetCurrentProcess(), reinterpret_cast<void*>(cursor), MEM_PRESERVE_PLACEHOLDER)) fail("unmap shared guest page");
                 const auto found = views.find(cursor);
                 if (found != views.end()) {
+                    if (found->second.pinnedByFaults && found->second.page->pins != 0) --found->second.page->pins;
                     std::erase(found->second.page->aliases, cursor);
                     views.erase(found);
                 }
