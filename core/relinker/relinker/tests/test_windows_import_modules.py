@@ -336,6 +336,25 @@ def main():
             assert run.returncode != 0 and 'Failed to load module:' in run.stderr and 'missing.prx' in run.stderr, (run.returncode, run.stderr)
             assert run.stderr.startswith('Failed to load module:'), run.stderr
 
+        result, shared = convert('unnamed-import-provider', 'a.prx')
+        assert result.returncode == 0, result.stderr
+        shared_provider = shared.parent / 'app0' / 'prx' / 'a.prx.guest.prx'
+        case = work / 'unnamed-import-from-host-library'
+        (case / 'prx').mkdir(parents=True)
+        other = provider(33)
+        other[0x800:0x80c] = b'\0other#A#B\0\0'
+        (case / 'prx' / 'c.prx').write_bytes(other)
+        source = case / 'input.elf'
+        source.write_bytes(executable('libhost.prx', 'shared'))
+        output = case / 'output.exe'
+        result = subprocess.run([str(relinker), '--windows', str(source), str(output)], capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, (result.stdout, result.stderr)
+        (case / 'libs').mkdir()
+        (case / 'libs' / 'libhost.prx').write_bytes(shared_provider.read_bytes())
+        if os.name == 'nt':
+            run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
+            assert run.returncode == 11, ('a needed host library must be loaded for an import without a library name', run.returncode, run.stdout, run.stderr)
+
         for index, (symbol, module_name) in enumerate([('shared#A#B', None), ('shared', None), ('shared#A#B', 'libSceJson')]):
             case = work / ('missing-unused-dependency-' + str(index))
             modules = case / 'prx'
@@ -348,7 +367,7 @@ def main():
             assert result.returncode == 0, (symbol, module_name, result.stdout, result.stderr)
             if os.name == 'nt':
                 run = subprocess.run([str(output)], capture_output=True, text=True, timeout=30)
-                assert run.returncode == 11 and 'unused.prx' not in run.stderr, (symbol, module_name, run.returncode, run.stdout, run.stderr)
+                assert run.returncode == 11 and 'unused.prx -> not found; nothing is imported from it' in run.stderr, (symbol, module_name, run.returncode, run.stdout, run.stderr)
 
     print('Windows module-scoped import tests passed')
 
