@@ -21,4 +21,13 @@ if(BUILD_TESTING)
         set_tests_properties(guest_ppsa07411_exports PROPERTIES ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceHmd2>")
     endif()
+    add_test_executable(guest_ppsa29866_exports_tests ${LIBS_INCLUDE_DIR}/tests/GuestPPSA29866Exports.cpp)
+    target_include_directories(guest_ppsa29866_exports_tests PRIVATE ${LIBS_INCLUDE_DIR})
+    target_link_libraries(guest_ppsa29866_exports_tests PRIVATE libSceHmd2 libSceVideoOut libc)
+    configure_windows_unwind(guest_ppsa29866_exports_tests)
+    add_test(NAME guest_ppsa29866_exports COMMAND guest_ppsa29866_exports_tests)
+    if(WIN32)
+        set_tests_properties(guest_ppsa29866_exports PROPERTIES ENVIRONMENT_MODIFICATION
+            "PATH=path_list_prepend:$<TARGET_FILE_DIR:libSceHmd2>")
+    endif()
 endif()
