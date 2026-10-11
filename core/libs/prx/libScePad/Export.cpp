@@ -281,4 +281,9 @@ int APS5_VABI scePadSetAngularVelocityBiasCorrectionState(int handle, bool enabl
  return PAD_OK;
 }
 
+int APS5_VABI scePadVrControllerGetTriggerEffectStates(void) {
+    NotImplemented_nid_no_patch(__func__);
+    return 0;
+}
+
 }
