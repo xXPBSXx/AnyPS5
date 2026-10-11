@@ -31,7 +31,6 @@ int APS5_VABI sceSslEnableVerifyOption();
 int APS5_VABI sceSslConnect();
 int APS5_VABI sceSslRead();
 int APS5_VABI sceSslWrite();
-int APS5_VABI sceSharePlayGetCurrentConnectionInfoA();
 int APS5_VABI sceConvertKeycodeGetCharacter();
 int APS5_VABI sceNpSessionSignalingGetGroupFromSessionId();
 int APS5_VABI _ZN3sce4Json14InitParameter225setSpecialFloatFormatTypeENS0_22SpecialFloatFormatTypeE();
@@ -76,7 +75,6 @@ const Export exports[] = {
     {"sceSslConnect", sceSslConnect},
     {"sceSslRead", sceSslRead},
     {"sceSslWrite", sceSslWrite},
-    {"sceSharePlayGetCurrentConnectionInfoA", sceSharePlayGetCurrentConnectionInfoA},
     {"sceConvertKeycodeGetCharacter", sceConvertKeycodeGetCharacter},
     {"sceNpSessionSignalingGetGroupFromSessionId", sceNpSessionSignalingGetGroupFromSessionId},
     {"_ZN3sce4Json14InitParameter225setSpecialFloatFormatTypeENS0_22SpecialFloatFormatTypeE", _ZN3sce4Json14InitParameter225setSpecialFloatFormatTypeENS0_22SpecialFloatFormatTypeE},
