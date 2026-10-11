@@ -19,6 +19,7 @@ static constexpr std::uint32_t SCE_NGS2_RACK_ID_SAMPLER = 0x1000;
 static constexpr std::uint32_t SCE_NGS2_RACK_ID_SUBMIXER = 0x2000;
 static constexpr std::uint32_t SCE_NGS2_RACK_ID_REVERB = 0x2001;
 static constexpr std::uint32_t SCE_NGS2_RACK_ID_MASTERING = 0x3000;
+static constexpr std::uint32_t SCE_NGS2_RACK_ID_CUSTOM_SAMPLER = 0x4001;
 static constexpr std::uint32_t SCE_NGS2_RACK_ID_CUSTOM_SUBMIXER = 0x4002;
 
 static constexpr std::uint32_t SCE_NGS2_WAVEFORM_TYPE_PCM_I16L = 0x12;
@@ -280,6 +281,17 @@ struct Ngs2CustomSubmixerRackOption {
     std::uint32_t max_inputs;
 };
 static_assert(sizeof(Ngs2CustomSubmixerRackOption) == 1288);
+
+struct Ngs2CustomSamplerRackOption {
+    Ngs2CustomRackOption custom_rack_option;
+    std::uint32_t max_channel_works;
+    std::uint32_t max_waveform_blocks;
+    std::uint32_t max_atrac9_decoders;
+    std::uint32_t max_atrac9_channel_works;
+    std::uint32_t max_ajm_atrac9_decoders;
+    std::uint32_t max_codec_caches;
+};
+static_assert(sizeof(Ngs2CustomSamplerRackOption) == 1304);
 
 struct Ngs2RackInfo {
     char name[64];

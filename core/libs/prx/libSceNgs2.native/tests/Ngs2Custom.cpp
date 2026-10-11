@@ -224,8 +224,58 @@ static void TestRackOptions() {
     Require(calls.cleanupVoices == (std::vector<std::uint32_t>{0, 1}));
 }
 
+struct RawVoiceParam {
+    Ngs2VoiceParamHeader header;
+};
+
+static void TestCustomSamplerRack() {
+    calls = {};
+    const auto system = CreateSystem();
+    const Ngs2CustomUserFx2ModuleOption modules[1] = {Module(Gain)};
+    const auto submixer = RackOption(modules, 1);
+    Ngs2CustomSamplerRackOption option{};
+    std::memcpy(&option.custom_rack_option, &submixer.custom_rack_option, sizeof(option.custom_rack_option));
+    option.custom_rack_option.rack_option.size = sizeof(option);
+    option.max_channel_works = 4;
+    option.max_waveform_blocks = 4;
+    Ngs2ContextBufferInfo query{};
+    Require(sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &option.custom_rack_option.rack_option, &query) == SCE_NGS2_OK);
+    const auto buffer = Buffer(query);
+    uintptr_t rack = 0;
+    Require(sceNgs2RackCreate(system, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &option.custom_rack_option.rack_option, &buffer, &rack) == SCE_NGS2_OK);
+    Require(calls.setupVoices == (std::vector<std::uint32_t>{0, 1}));
+    Ngs2RackInfo info{};
+    Require(sceNgs2RackGetInfo(rack, &info, sizeof(info)) == SCE_NGS2_OK);
+    Require(info.rack_id == SCE_NGS2_RACK_ID_CUSTOM_SAMPLER && info.type == 4 && info.max_voices == 2 && info.max_channel_works == 4);
+
+    const auto voice = Voice(rack);
+    Require(ControlThrows<std::runtime_error>(voice, SCE_NGS2_RACK_ID_CUSTOM_SAMPLER << 16, RawVoiceParam{}));
+
+    auto wrongSize = option;
+    wrongSize.custom_rack_option.rack_option.size = sizeof(Ngs2CustomSubmixerRackOption);
+    bool failed = false;
+    try {
+        sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, &wrongSize.custom_rack_option.rack_option, &query);
+    } catch (const std::invalid_argument&) {
+        failed = true;
+    }
+    Require(failed);
+    failed = false;
+    try {
+        sceNgs2RackQueryBufferSize(SCE_NGS2_RACK_ID_CUSTOM_SAMPLER, nullptr, &query);
+    } catch (const std::runtime_error&) {
+        failed = true;
+    }
+    Require(failed);
+
+    Require(sceNgs2RackDestroy(rack, nullptr) == SCE_NGS2_OK);
+    Require(calls.cleanupVoices == (std::vector<std::uint32_t>{0, 1}));
+    Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
+}
+
 int main() {
     TestUserFxChain();
     TestRackOptions();
+    TestCustomSamplerRack();
     return 0;
 }
