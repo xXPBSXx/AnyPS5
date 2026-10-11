@@ -1,5 +1,4 @@
 #include "Equeue.hpp"
-#include "prx/libc/include/General.hpp"
 #include "prx/libkernel/Time/include/Time.hpp"
 
 #include <algorithm>
@@ -281,16 +280,6 @@ int APS5_VABI EqueueDeleteEvent_nid_postfix(KernelEqueue eq, uintptr_t ident, in
     return owner->DeleteEvent(ident, filter);
 }
 
-
-int APS5_VABI kqueue_nid_postfix() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
-
-int APS5_VABI kevent_nid_postfix() {
-    NotImplemented_nid_no_patch(__func__);
-    return 0;
-}
 
 int APS5_VABI sceKernelCreateEqueue(KernelEqueue* eq, const char* name) {
     if (eq == nullptr || name == nullptr) {
