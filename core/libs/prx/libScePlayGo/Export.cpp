@@ -24,6 +24,7 @@ static int32_t g_installSpeed = PLAYGO_INSTALL_SPEED_FULL;
 static constexpr int SCE_PLAYGO_ERROR_BAD_CHUNK_ID = static_cast<int>(0x80B2000C);
 static constexpr int SCE_PLAYGO_ERROR_BAD_SIZE = static_cast<int>(0x80B2000B);
 static constexpr int SCE_PLAYGO_ERROR_BAD_LOCUS = static_cast<int>(0x80B20010);
+static constexpr uint16_t UNDEFINED_TABLE_CHUNK_LIMIT = 256;
 
 struct ChunkTable {
     std::set<uint16_t> ids{0};
@@ -70,7 +71,7 @@ static const ChunkTable& Chunks() {
 
 static bool IsKnownChunk(uint16_t id) {
     const auto& chunks = Chunks();
-    return !chunks.defined || chunks.ids.contains(id);
+    return chunks.defined ? chunks.ids.contains(id) : id < UNDEFINED_TABLE_CHUNK_LIMIT;
 }
 
 static int ValidateChunks(const uint16_t* chunk_ids, uint32_t number_of_entries) {
