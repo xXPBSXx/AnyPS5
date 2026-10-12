@@ -1,10 +1,40 @@
 #ifndef CORE_LIBS_PRX_LIBC_INCLUDE_GENERAL_LOGMACROS_HPP
 #define CORE_LIBS_PRX_LIBC_INCLUDE_GENERAL_LOGMACROS_HPP
 
+#include <chrono>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <string>
+
+inline bool LogTimestampsEnabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("APS5_LOG_TIMESTAMPS");
+        return value != nullptr && *value != 0 && std::strcmp(value, "0") != 0;
+    }();
+    return enabled;
+}
+
+inline int FormatLogTimestamp(char* buffer, std::size_t size, const std::tm& local, int milliseconds) {
+    return std::snprintf(buffer, size, "[%02d:%02d:%02d.%03d] ", local.tm_hour, local.tm_min, local.tm_sec, milliseconds);
+}
+
+inline std::string CurrentLogTimestamp() {
+    const auto now = std::chrono::system_clock::now();
+    const auto seconds = std::chrono::system_clock::to_time_t(now);
+    const auto milliseconds = static_cast<int>(std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000);
+    std::tm local{};
+#ifdef _WIN32
+    localtime_s(&local, &seconds);
+#else
+    localtime_r(&seconds, &local);
+#endif
+    char buffer[32];
+    const int length = FormatLogTimestamp(buffer, sizeof(buffer), local, milliseconds);
+    return std::string(buffer, static_cast<std::size_t>(length));
+}
 
 #ifdef __MINGW_PRINTF_FORMAT
 [[gnu::format(__MINGW_PRINTF_FORMAT, 2, 3)]]
@@ -26,7 +56,14 @@ inline int WriteLogLine(std::FILE* stream, const char* format, ...) {
     }
     va_end(again);
     if (length < 0) return length;
-    std::fwrite(large.empty() ? small : large.data(), 1, static_cast<std::size_t>(length), stream);
+    const char* body = large.empty() ? small : large.data();
+    if (LogTimestampsEnabled()) {
+        std::string line = CurrentLogTimestamp();
+        line.append(body, static_cast<std::size_t>(length));
+        std::fwrite(line.data(), 1, line.size(), stream);
+        return std::fflush(stream);
+    }
+    std::fwrite(body, 1, static_cast<std::size_t>(length), stream);
     return std::fflush(stream);
 }
 

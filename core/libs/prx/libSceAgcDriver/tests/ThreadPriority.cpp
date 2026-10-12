@@ -6,6 +6,13 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <thread>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 
 namespace {
 
@@ -56,6 +63,37 @@ void PlanTests() {
     Require(kept.refusal.empty() && !kept.limit.has_value(), "limits rtkit already accepts must be left alone");
 }
 
+std::string CurrentThreadName() {
+#ifdef _WIN32
+    PWSTR description = nullptr;
+    if (FAILED(GetThreadDescription(GetCurrentThread(), &description)) || description == nullptr) return {};
+    std::string name;
+    for (const wchar_t* character = description; *character != L'\0'; ++character) name.push_back(static_cast<char>(*character));
+    LocalFree(description);
+    return name;
+#else
+    char name[16] = {};
+    pthread_getname_np(pthread_self(), name, sizeof(name));
+    return name;
+#endif
+}
+
+void NameTest() {
+    for (const char* role : {"presenter", "queue 0x0 worker"}) {
+        std::string name;
+        std::thread([&] {
+            RaiseWorkerThreadPriority(role);
+            name = CurrentThreadName();
+        }).join();
+        const std::string expected = std::string(role).substr(0, 15);
+#ifdef _WIN32
+        Require(name == role, std::string("the worker thread must be named '") + role + "', got '" + name + "'");
+#else
+        Require(name == expected, std::string("the worker thread must be named '") + expected + "', got '" + name + "'");
+#endif
+    }
+}
+
 void RefusalTest() {
     bool threw = false;
     try {
@@ -77,6 +115,7 @@ int main(int argc, char** argv) {
         }
         ParseTests();
         PlanTests();
+        NameTest();
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';
         return 1;

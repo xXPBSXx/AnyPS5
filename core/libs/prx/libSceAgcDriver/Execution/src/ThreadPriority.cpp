@@ -14,6 +14,7 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <pthread.h>
 #include <sched.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
@@ -23,6 +24,20 @@
 namespace AgcDriver {
 
 namespace {
+
+void NameCurrentThread(const char* role) {
+#ifdef _WIN32
+    const int length = MultiByteToWideChar(CP_UTF8, 0, role, -1, nullptr, 0);
+    if (length <= 1) return;
+    std::wstring name(static_cast<std::size_t>(length) - 1, L'\0');
+    MultiByteToWideChar(CP_UTF8, 0, role, -1, name.data(), length);
+    SetThreadDescription(GetCurrentThread(), name.c_str());
+#else
+    char name[16];
+    std::snprintf(name, sizeof(name), "%s", role);
+    pthread_setname_np(pthread_self(), name);
+#endif
+}
 
 ThreadPriorityMode RequestedMode() {
     static const ThreadPriorityMode mode = ParseThreadPriorityMode(std::getenv("APS5_THREAD_PRIORITY"));
@@ -302,6 +317,7 @@ RealtimePlan PlanRealtime(std::uint32_t priority, const std::optional<RtkitLimit
 }
 
 void RaiseWorkerThreadPriority(const char* role) {
+    if (role != nullptr) NameCurrentThread(role);
     if (RequestedMode() == ThreadPriorityMode::Off) return;
     Raise(role);
 }
