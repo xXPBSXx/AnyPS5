@@ -54,15 +54,22 @@ static bool OmittedResolutionSucceeds() {
     return true;
 }
 
-static void UnsupportedResolutionStillThrows() {
-    KernelTimespec resolution{-1, -1};
-    bool rejected = false;
-    try {
-        clock_getres_nid_postfix(3, &resolution);
-    } catch (const std::runtime_error&) {
-        rejected = true;
+static void UnknownClocksFailWithEinval() {
+    constexpr int GuestEinval = 22;
+    constexpr int GuestEfault = 14;
+    for (const int clock : {3, 6, 16, 9999, INT_MAX}) {
+        KernelTimespec time{-1, -1};
+        *__error_nid_postfix() = 0;
+        Require(clock_gettime_nid_postfix(clock, &time) == -1 && *__error_nid_postfix() == GuestEinval);
+        Require(time.tv_sec == -1 && time.tv_nsec == -1);
+        *__error_nid_postfix() = 0;
+        Require(clock_getres_nid_postfix(clock, &time) == -1 && *__error_nid_postfix() == GuestEinval);
+        Require(time.tv_sec == -1 && time.tv_nsec == -1);
+        *__error_nid_postfix() = 0;
+        Require(clock_gettime_nid_postfix(clock, nullptr) == -1 && *__error_nid_postfix() == GuestEinval);
     }
-    Require(rejected && resolution.tv_sec == -1 && resolution.tv_nsec == -1);
+    *__error_nid_postfix() = 0;
+    Require(clock_gettime_nid_postfix(GUEST_CLOCK_REALTIME, nullptr) == -1 && *__error_nid_postfix() == GuestEfault);
     constexpr int fault = static_cast<int>(0x8002000eu);
     Require(sceKernelClockGetres(GUEST_CLOCK_REALTIME, nullptr) == fault);
     Require(sceKernelClockGetres(3, nullptr) == fault);
@@ -244,7 +251,7 @@ static void SettimeValidatesLikeFreebsd() {
 
 int main() {
     if (!OmittedResolutionSucceeds()) return 1;
-    UnsupportedResolutionStillThrows();
+    UnknownClocksFailWithEinval();
     SettimeValidatesLikeFreebsd();
     CalendarConversionsInitializeTheirState();
     SecondClockReportsWholeSeconds();
