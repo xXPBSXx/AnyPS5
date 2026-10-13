@@ -36,6 +36,7 @@ struct GuestFileMode {
     bool writes = false;
     bool exclusive = false;
     bool append = false;
+    bool reads = true;
 };
 
 static std::optional<GuestFileMode> ParseFileMode(const char* mode) {
@@ -48,7 +49,7 @@ static std::optional<GuestFileMode> ParseFileMode(const char* mode) {
         if (*flag == 'x') exclusive = true;
     }
     if (exclusive && access == 'r' && !update) return std::nullopt;
-    GuestFileMode result{std::string(1, access), access != 'r' || update, exclusive, access == 'a'};
+    GuestFileMode result{std::string(1, access), access != 'r' || update, exclusive, access == 'a', access == 'r' || update};
     if (update) result.native += '+';
 #ifdef _WIN32
     result.native += 'b';
@@ -232,6 +233,7 @@ FileStream* APS5_VABI fdopen_nid_postfix(int descriptor, const char* mode) {
 #endif
         if (!native) return nullptr;
         auto* stream = new (storage.get()) FileStream(native, true);
+        stream->SetReadable(parsed->reads);
         storage.release();
         return stream;
     } catch (const std::bad_alloc&) { errno = 12; return nullptr; }
@@ -253,6 +255,7 @@ FileStream* APS5_VABI freopen_nid_postfix(const char* filename, const char* mode
             }
         }
         if (stream->Reopen(path, parsed->native.c_str())) {
+            stream->SetReadable(parsed->reads);
             if (parsed->append) static_cast<void>(std::fseek(stream->GetHandle(), 0, SEEK_END));
             if (!path.empty() && parsed->writes) RecordWrittenPath_nid_no_patch(path);
             return stream;
@@ -302,6 +305,7 @@ FileStream* APS5_VABI fopen_nid_postfix(const char* filename, const char* mode) 
     if (parsed->append) static_cast<void>(std::fseek(handle.get(), 0, SEEK_END));
     if (parsed->writes) RecordWrittenPath_nid_no_patch(fpath);
     auto stream = std::make_unique<FileStream>(handle.get(), true);
+    stream->SetReadable(parsed->reads);
     handle.release();
     return stream.release();
 }
@@ -352,6 +356,7 @@ FileStream* APS5_VABI _ZSt7_FiopenPKcNSt5_IosbIiE9_OpenmodeEi_nid_postfix(const 
 size_t APS5_VABI fread_nid_postfix(void* buffer, size_t size, size_t count, FileStream* stream) {
     auto* handle = GetNativeStream(stream);
     if (size == 0 || count == 0) return 0;
+    if (stream->RejectRead()) return 0;
     if (!buffer) throw std::runtime_error("fread: null buffer");
     if (count > std::numeric_limits<std::size_t>::max() / size) throw std::overflow_error("fread: buffer size overflow");
     const auto bytes = size * count;

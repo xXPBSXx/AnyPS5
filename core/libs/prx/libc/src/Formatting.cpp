@@ -281,6 +281,7 @@ int APS5_VABI fprintf_nid_postfix(FileStream* stream, const char* format, ...) {
 
 int APS5_VABI fscanf_nid_postfix(FileStream* stream, const char* format, ...) {
     auto* native = GetNativeStream(stream);
+    if (stream->RejectRead()) return EOF;
 #ifdef _WIN32
     __builtin_sysv_va_list args;
     __builtin_sysv_va_start(args, format);

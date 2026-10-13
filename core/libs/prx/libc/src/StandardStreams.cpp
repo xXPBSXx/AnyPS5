@@ -15,6 +15,7 @@ FileStream* __stderrp_nid_postfix = &_Stderr_nid_postfix;
 int __isthreaded_nid_postfix = 1;
 
 int APS5_VABI fgetc_nid_postfix(FileStream* stream) {
+    if (stream->RejectRead()) return EOF;
     const int result = std::fgetc(GetNativeStream(stream));
     stream->SyncStatus();
     return result;
@@ -36,6 +37,7 @@ std::int32_t APS5_VABI ungetwc_nid_postfix(std::int32_t value, FileStream* strea
 }
 int APS5_VABI getc_nid_postfix(FileStream* stream) { return fgetc_nid_postfix(stream); }
 int APS5_VABI getc_unlocked_nid_postfix(FileStream* stream) {
+    if (stream->RejectRead()) return EOF;
 #ifdef _WIN32
     const int result = _fgetc_nolock(GetNativeStream(stream));
 #else
@@ -74,6 +76,7 @@ char* APS5_VABI fgets_nid_postfix(char* buffer, int size, FileStream* stream) {
         errno = 22;
         return nullptr;
     }
+    if (stream->RejectRead()) return nullptr;
     auto* result = std::fgets(buffer, size, GetNativeStream(stream));
     stream->SyncStatus();
     return result;

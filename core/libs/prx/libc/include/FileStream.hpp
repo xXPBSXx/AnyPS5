@@ -50,11 +50,13 @@ class FileStream {
     std::FILE* _handle;
     bool _dynamic;
     bool guestError = false;
+    bool readable = true;
 
 public:
     explicit FileStream(std::FILE* handle, bool dynamic = false) : _handle(handle), _dynamic(dynamic) {
         if (!_handle) throw std::runtime_error("FileStream: null handle");
         _guest.flags = handle == stdin ? 4 : handle == stdout || handle == stderr ? 8 : 0x10;
+        readable = handle != stdout && handle != stderr;
 #ifdef _WIN32
         const int descriptor = _fileno(handle);
 #else
@@ -126,6 +128,15 @@ public:
     void SetError() {
         guestError = true;
         SyncStatus();
+    }
+
+    void SetReadable(bool value) { readable = value; }
+
+    bool RejectRead() {
+        if (readable) return false;
+        errno = 9;
+        SetError();
+        return true;
     }
 
     void ClearError() {
