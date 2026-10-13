@@ -79,7 +79,6 @@ int APS5_VABI tcgetattr_nid_postfix(int descriptor, void* attributes) {
 }
 
 int APS5_VABI tcsetattr_nid_postfix(int descriptor, int action, const void* attributes) {
-    if ((action & SetSoft) != 0 && attributes == nullptr) throw std::invalid_argument("tcsetattr: attributes is null");
     const int mode = action & ~SetSoft;
     if (mode != SetNow && mode != SetDrain && mode != SetFlush) return Fail(InvalidArgument);
     if (attributes == nullptr) return Fail(BadAddress);
