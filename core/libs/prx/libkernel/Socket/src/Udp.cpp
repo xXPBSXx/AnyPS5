@@ -724,8 +724,12 @@ int APS5_VABI setsockopt_nid_postfix(int descriptor, int level, int option,
     }
     const auto socket = Lookup(descriptor);
     if (!socket) return -1;
-    if (level != 0xffff) return Fail(42);
     std::lock_guard lock(socket->modeMutex);
+    if (level == 6) {
+        const int tcpError = GuestSockets::SetTcpLevelOption(static_cast<std::uintptr_t>(socket->value), socket->options, socket->family, socket->type, option, value, length);
+        return tcpError == 0 ? 0 : Fail(tcpError);
+    }
+    if (level != 0xffff) return Fail(42);
     const int error = GuestSockets::SetSocketLevelOption(static_cast<std::uintptr_t>(socket->value), socket->options, option, value, length);
     return error == 0 ? 0 : Fail(error);
 }
@@ -733,9 +737,13 @@ int APS5_VABI getsockopt_nid_postfix(int descriptor, int level, int option,
                                     void* value, std::uint32_t* length) {
     const auto socket = Lookup(descriptor);
     if (!socket) return -1;
-    if (level != 0xffff) return Fail(42);
+    if (level != 0xffff && level != 6) return Fail(42);
     if (!length) return Fail(22);
     std::lock_guard lock(socket->modeMutex);
+    if (level == 6) {
+        const int tcpError = GuestSockets::GetTcpLevelOption(static_cast<std::uintptr_t>(socket->value), socket->options, socket->family, socket->type, option, value, length);
+        return tcpError == 0 ? 0 : Fail(tcpError);
+    }
     const int error = GuestSockets::GetSocketLevelOption(static_cast<std::uintptr_t>(socket->value), socket->options, socket->type, option, value, length);
     return error == 0 ? 0 : Fail(error);
 }
