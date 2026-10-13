@@ -146,6 +146,7 @@ static int MapFlags(int sceFlags) {
 extern "C" int* APS5_VABI __error_nid_postfix();
 extern "C" int APS5_VABI fcntl_nid_postfix(int descriptor, int command, ...);
 static constexpr int GuestSetFlags = 4;
+static constexpr int GuestEfault = 14;
 
 static int SceErrorFromErrno(int error) {
     constexpr int GuestEio = 5;
@@ -250,8 +251,10 @@ std::int64_t APS5_VABI sceKernelRead(int d, void* buf, std::size_t nbytes) {
         const auto n = GuestSockets::Read(d, buf, nbytes);
         return n < 0 ? SceKernelError(*__error_nid_postfix()) : n;
     }
+    char empty = 0;
     if (buf == nullptr) {
-        throw std::invalid_argument(std::string(__func__) + ": buf is null");
+        if (nbytes != 0) return SceErrorFromErrno(GuestEfault);
+        buf = &empty;
     }
     const GuestArena::HostWrite destination(buf, nbytes);
     if (!destination.Open()) errno = EFAULT;
@@ -266,8 +269,10 @@ std::int64_t APS5_VABI sceKernelWrite(int d, const void* buf, std::size_t nbytes
         const auto n = GuestSockets::Write(d, buf, nbytes);
         return n < 0 ? SceKernelError(*__error_nid_postfix()) : n;
     }
+    const char empty = 0;
     if (buf == nullptr) {
-        throw std::invalid_argument(std::string(__func__) + ": buf is null");
+        if (nbytes != 0) return SceErrorFromErrno(GuestEfault);
+        buf = &empty;
     }
     auto n = NativeWrite(d, buf, nbytes);
     if (n < 0) return SceIoErrorFromErrno(errno);
@@ -291,12 +296,7 @@ std::int64_t APS5_VABI sceKernelLseek(int d, std::int64_t offset, int whence) {
 }
 
 int APS5_VABI sceKernelStat(const char* path, FileStat* sb) {
-    if (path == nullptr) {
-        throw std::invalid_argument(std::string(__func__) + ": path is null");
-    }
-    if (sb == nullptr) {
-        throw std::invalid_argument(std::string(__func__) + ": sb is null");
-    }
+    if (path == nullptr) return SceErrorFromErrno(GuestEfault);
     if (*path == '\0') return SceErrorFromErrno(2);
     std::filesystem::path native;
     if (const int error = ResolvePathError_nid_no_patch(path, native)) return SceKernelError(error);
@@ -310,14 +310,13 @@ int APS5_VABI sceKernelStat(const char* path, FileStat* sb) {
     }
     const std::string_view guestPath(path);
     if (!guestPath.empty() && guestPath.back() == '/' && !std::filesystem::is_directory(status)) return SceErrorFromErrno(GuestEnotdir);
+    if (sb == nullptr) return SceErrorFromErrno(GuestEfault);
     File::FillFileStat(native, sb);
     return 0;
 }
 
 int APS5_VABI sceKernelUnlink(const char* path) {
-    if (path == nullptr) {
-        throw std::invalid_argument(std::string(__func__) + ": path is null");
-    }
+    if (path == nullptr) return SceErrorFromErrno(GuestEfault);
     if (*path == '\0') return SceErrorFromErrno(2);
     std::filesystem::path native;
     if (const int error = ResolvePathError_nid_no_patch(path, native)) return SceKernelError(error);
