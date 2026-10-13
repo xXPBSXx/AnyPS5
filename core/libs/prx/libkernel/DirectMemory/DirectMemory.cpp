@@ -1010,6 +1010,7 @@ int DoMprotect(const void* addr, size_t len, int prot) {
 #else
     mutation.RegisterMainImage();
 #endif
+    if (!mutation.Registered(pointer, bytes)) return SCE_KERNEL_ERROR_EINVAL;
     mutation.Protect(pointer, bytes, (prot & 3) != 0, (prot & 2) != 0, (prot & GuestProtGpuReadWrite) != 0, [&] {
         if (mprotect(const_cast<void*>(pointer), bytes, nativeProtection) != 0) throw std::system_error(errno, std::generic_category(), "mprotect failed");
     });
@@ -1019,6 +1020,7 @@ int DoMprotect(const void* addr, size_t len, int prot) {
 
 int DoMtypeprotect(const void* addr, size_t len, int type, int prot) {
     const int result = DoMprotect(addr, len, prot);
+    if (result != 0) return result;
     const auto address = reinterpret_cast<std::uintptr_t>(addr);
     constexpr auto pageMask = static_cast<std::uintptr_t>(PS5_PAGE_SIZE - 1);
     const auto first = address & ~pageMask;
