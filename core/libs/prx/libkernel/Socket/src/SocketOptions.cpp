@@ -22,6 +22,7 @@ constexpr int GuestKeepAlive = 0x8;
 constexpr int GuestDontRoute = 0x10;
 constexpr int GuestBroadcast = 0x20;
 constexpr int GuestLinger = 0x80;
+constexpr int GuestNoSigpipe = 0x800;
 constexpr int GuestOobInline = 0x100;
 constexpr int GuestSendBuffer = 0x1001;
 constexpr int GuestReceiveBuffer = 0x1002;
@@ -81,6 +82,14 @@ int Copy(void* output, std::uint32_t* length, const void* value, std::uint32_t s
 
 int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int option, const void* value, std::uint32_t length) {
     const auto handle = static_cast<NativeHandle>(native);
+    if (option == GuestNoSigpipe) {
+        if (length < sizeof(int)) return ErrorInvalid;
+        if (!value) return ErrorInvalid;
+        int number;
+        std::memcpy(&number, value, sizeof(number));
+        state.noSigpipe = number != 0;
+        return 0;
+    }
     if (option == GuestLinger) {
         if (length < sizeof(GuestLingerValue)) return ErrorInvalid;
         if (!value) return ErrorInvalid;
@@ -128,7 +137,9 @@ int GetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int ty
         return Copy(value, length, &guest, sizeof(guest));
     }
     int number = 0;
-    if (const int nativeOption = NativeBoolean(option); nativeOption != -1) {
+    if (option == GuestNoSigpipe) {
+        number = state.noSigpipe ? GuestNoSigpipe : 0;
+    } else if (const int nativeOption = NativeBoolean(option); nativeOption != -1) {
         int enabled = 0;
         socklen_t size = sizeof(enabled);
         if (::getsockopt(handle, SOL_SOCKET, nativeOption, reinterpret_cast<NativeOptionOutput>(&enabled), &size)) return HostError();

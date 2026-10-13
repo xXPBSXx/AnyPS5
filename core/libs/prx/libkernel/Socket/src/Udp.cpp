@@ -507,6 +507,18 @@ namespace {
 constexpr int GuestUnix = 1;
 constexpr int GuestCloseOnExec = 0x10000000;
 constexpr int GuestNonBlocking = 0x20000000;
+constexpr int GuestNonBlockingOption = 0x1200;
+int SetBlockingMode(Socket& socket, bool nonblocking) {
+#ifdef _WIN32
+    unsigned long value = nonblocking ? 1 : 0;
+    if (ioctlsocket(socket.value, FIONBIO, &value)) return Fail(NativeError());
+#else
+    int value = nonblocking ? 1 : 0;
+    if (::ioctl(socket.value, FIONBIO, &value)) return Fail(NativeError());
+#endif
+    socket.nonblocking = nonblocking;
+    return 0;
+}
 int SetNonBlocking(Socket& socket) {
 #ifdef _WIN32
     unsigned long value = 1;
@@ -730,6 +742,12 @@ int APS5_VABI setsockopt_nid_postfix(int descriptor, int level, int option,
         return tcpError == 0 ? 0 : Fail(tcpError);
     }
     if (level != 0xffff) return Fail(42);
+    if (option == GuestNonBlockingOption) {
+        if (!value || length < sizeof(int)) return Fail(22);
+        int enabled;
+        std::memcpy(&enabled, value, sizeof(enabled));
+        return SetBlockingMode(*socket, enabled != 0);
+    }
     const int error = GuestSockets::SetSocketLevelOption(static_cast<std::uintptr_t>(socket->value), socket->options, option, value, length);
     return error == 0 ? 0 : Fail(error);
 }
@@ -740,6 +758,13 @@ int APS5_VABI getsockopt_nid_postfix(int descriptor, int level, int option,
     if (level != 0xffff && level != 6) return Fail(42);
     if (!length) return Fail(22);
     std::lock_guard lock(socket->modeMutex);
+    if (level == 0xffff && option == GuestNonBlockingOption) {
+        if (!value || *length < sizeof(int)) return Fail(22);
+        const int enabled = socket->nonblocking ? 1 : 0;
+        std::memcpy(value, &enabled, sizeof(enabled));
+        *length = sizeof(enabled);
+        return 0;
+    }
     if (level == 6) {
         const int tcpError = GuestSockets::GetTcpLevelOption(static_cast<std::uintptr_t>(socket->value), socket->options, socket->family, socket->type, option, value, length);
         return tcpError == 0 ? 0 : Fail(tcpError);

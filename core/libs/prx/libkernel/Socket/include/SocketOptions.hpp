@@ -5,6 +5,7 @@ namespace GuestSockets {
 
 struct SocketOptionState {
     int reportedError = 0;
+    bool noSigpipe = false;
 };
 
 int SetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int option, const void* value, std::uint32_t length);
