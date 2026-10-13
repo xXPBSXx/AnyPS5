@@ -28,6 +28,7 @@ static constexpr int SCE_PLAYGO_ERROR_BAD_LOCUS = static_cast<int>(0x80B20010);
 struct ChunkTable {
     std::set<uint16_t> ids{0};
     bool defined = false;
+    bool scenario = false;
 };
 
 static bool ReadPackageChunks(ChunkTable& table) {
@@ -48,7 +49,7 @@ static const ChunkTable& Chunks() {
         ChunkTable table;
         std::ifstream file(ResolvePath_nid_no_patch("/app0/playgo-chunkdefs.xml"));
         if (!file) {
-            ReadPackageChunks(table);
+            if (!ReadPackageChunks(table)) table.scenario = std::ifstream(ResolvePath_nid_no_patch("/app0/sce_sys/playgo-scenario.json")).good();
             return table;
         }
         table.defined = true;
@@ -70,7 +71,7 @@ static const ChunkTable& Chunks() {
 
 static bool IsKnownChunk(uint16_t id) {
     const auto& chunks = Chunks();
-    return !chunks.defined || chunks.ids.contains(id);
+    return chunks.defined ? chunks.ids.contains(id) : chunks.scenario || id == 0;
 }
 
 static int ValidateChunks(const uint16_t* chunk_ids, uint32_t number_of_entries) {
