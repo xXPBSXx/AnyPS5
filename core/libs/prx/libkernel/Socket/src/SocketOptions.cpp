@@ -4,10 +4,13 @@
 #include <ws2tcpip.h>
 #else
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #endif
 #include "prx/libkernel/Socket/include/SocketError.hpp"
 #include "prx/libkernel/Socket/include/SocketOptions.hpp"
 #include <algorithm>
+#include <climits>
 #include <cstring>
 
 namespace GuestSockets {
@@ -30,6 +33,18 @@ constexpr int GuestReceiveBuffer = 0x1002;
 constexpr int GuestError = 0x1007;
 constexpr int GuestType = 0x1008;
 
+constexpr int GuestTcpNoDelay = 1;
+constexpr int GuestTcpNoOptions = 8;
+constexpr int GuestTcpNoPush = 4;
+constexpr std::uint32_t GuestTcpNoPushFlag = 0x1000;
+constexpr int GuestTcpKeepInit = 128;
+constexpr int GuestTcpKeepIdle = 256;
+constexpr int GuestTcpKeepInterval = 512;
+constexpr int GuestTcpKeepCount = 1024;
+constexpr int GuestStream = 1;
+constexpr int GuestInet = 2;
+constexpr int GuestInet6 = 28;
+constexpr unsigned int GuestClockHz = 1000;
 constexpr int ErrorInvalid = 22;
 constexpr int ErrorDomain = 33;
 constexpr int ErrorNoProtocolOption = 42;
@@ -167,6 +182,77 @@ int GetSocketLevelOption(std::uintptr_t native, SocketOptionState& state, int ty
     } else if (option == GuestSendBuffer || option == GuestReceiveBuffer) {
         socklen_t size = sizeof(number);
         if (::getsockopt(handle, SOL_SOCKET, option == GuestSendBuffer ? SO_SNDBUF : SO_RCVBUF, reinterpret_cast<NativeOptionOutput>(&number), &size)) return HostError();
+    } else {
+        return ErrorNoProtocolOption;
+    }
+    return Copy(value, length, &number, sizeof(number));
+}
+
+namespace {
+
+bool TcpSocket(int family, int type) { return type == GuestStream && (family == GuestInet || family == GuestInet6); }
+
+int NativeKeep(int option) {
+    switch (option) {
+        case GuestTcpKeepIdle: return TCP_KEEPIDLE;
+        case GuestTcpKeepInterval: return TCP_KEEPINTVL;
+        case GuestTcpKeepCount: return TCP_KEEPCNT;
+        default: return -1;
+    }
+}
+
+}
+
+int SetTcpLevelOption(std::uintptr_t native, SocketOptionState& state, int family, int type, int option, const void* value, std::uint32_t length) {
+    if (!TcpSocket(family, type)) return ErrorNoProtocolOption;
+    const bool known = option == GuestTcpNoDelay || option == GuestTcpNoOptions || option == GuestTcpNoPush || option == GuestTcpKeepInit || NativeKeep(option) != -1;
+    if (!known) return ErrorNoProtocolOption;
+    if (length < sizeof(int)) return ErrorInvalid;
+    if (!value) return ErrorInvalid;
+    const auto handle = static_cast<NativeHandle>(native);
+    unsigned int number;
+    std::memcpy(&number, value, sizeof(number));
+    if (option == GuestTcpNoOptions || option == GuestTcpNoPush) {
+        const std::uint32_t flag = option == GuestTcpNoPush ? GuestTcpNoPushFlag : static_cast<std::uint32_t>(option);
+        if (number != 0) state.tcpStored |= flag;
+        else state.tcpStored &= ~flag;
+        return 0;
+    }
+    if (option == GuestTcpNoDelay) {
+        const int enabled = number != 0 ? 1 : 0;
+        if (::setsockopt(handle, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<NativeOptionValue>(&enabled), sizeof(enabled))) return HostError();
+        return 0;
+    }
+    if (option != GuestTcpKeepCount && number > UINT_MAX / GuestClockHz) return ErrorInvalid;
+    if (option == GuestTcpKeepInit) {
+        state.keepInit = number;
+        return 0;
+    }
+    const int seconds = number > static_cast<unsigned int>(INT_MAX) ? INT_MAX : static_cast<int>(number);
+    if (::setsockopt(handle, IPPROTO_TCP, NativeKeep(option), reinterpret_cast<NativeOptionValue>(&seconds), sizeof(seconds))) return HostError();
+    return 0;
+}
+
+int GetTcpLevelOption(std::uintptr_t native, SocketOptionState& state, int family, int type, int option, void* value, std::uint32_t* length) {
+    if (!TcpSocket(family, type)) return ErrorNoProtocolOption;
+    const auto handle = static_cast<NativeHandle>(native);
+    unsigned int number = 0;
+    if (option == GuestTcpNoDelay) {
+        int enabled = 0;
+        socklen_t size = sizeof(enabled);
+        if (::getsockopt(handle, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<NativeOptionOutput>(&enabled), &size)) return HostError();
+        number = enabled != 0 ? 4u : 0u;
+    } else if (option == GuestTcpNoOptions) {
+        number = state.tcpStored & static_cast<std::uint32_t>(GuestTcpNoOptions);
+    } else if (option == GuestTcpNoPush) {
+        number = state.tcpStored & GuestTcpNoPushFlag;
+    } else if (option == GuestTcpKeepInit) {
+        number = state.keepInit;
+    } else if (const int nativeOption = NativeKeep(option); nativeOption != -1) {
+        int seconds = 0;
+        socklen_t size = sizeof(seconds);
+        if (::getsockopt(handle, IPPROTO_TCP, nativeOption, reinterpret_cast<NativeOptionOutput>(&seconds), &size)) return HostError();
+        number = static_cast<unsigned int>(seconds);
     } else {
         return ErrorNoProtocolOption;
     }
