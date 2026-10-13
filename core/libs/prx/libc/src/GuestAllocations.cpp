@@ -377,6 +377,25 @@ bool GuestAllocationsOverlaps_nid_postfix(void*, const void* pointer, std::size_
     return false;
 }
 
+bool GuestAllocationsRegistered_nid_postfix(void*, const void* pointer, std::size_t bytes) {
+    const auto address = reinterpret_cast<std::uintptr_t>(pointer);
+    require(address != 0 && bytes != 0 && bytes <= std::numeric_limits<std::uint64_t>::max() - address, "invalid guest allocation range");
+    const auto end = address + bytes;
+    auto cursor = address;
+    const auto& ranges = registry().ranges;
+    auto it = ranges.upper_bound(address);
+    if (it != ranges.begin()) --it;
+    for (; it != ranges.end(); ++it) {
+        const auto base = it->first;
+        const auto finish = base + it->second->bytes;
+        if (finish <= cursor) continue;
+        if (base > cursor) return false;
+        cursor = finish;
+        if (cursor >= end) return true;
+    }
+    return false;
+}
+
 bool GuestAllocationsCovers_nid_postfix(void*, const void* pointer, std::size_t bytes) {
     const auto address = reinterpret_cast<std::uintptr_t>(pointer);
     require(address != 0 && bytes != 0 && bytes <= std::numeric_limits<std::uint64_t>::max() - address, "invalid guest allocation range");
