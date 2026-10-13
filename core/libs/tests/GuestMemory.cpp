@@ -2254,6 +2254,8 @@ int main() {
     reject(page, 8, 0x1002, -1, 0, 22);
     reject(page, 3, 0x1002, 0, 0, 22);
     reject(page, 3, 0x1002, -1, 1, 22);
+    reject(page, 3, 0x1003, -1, 0, 22);
+    reject(page, 3, 0x3, 0, 0, 22);
     reject(page, 3, 0x1001, -1, 0, 45); // shared
     reject(page, 3, 0x1012, -1, 0, 45); // fixed
     reject(page, 3, 0x2, 0, 0, 45);    // file-backed

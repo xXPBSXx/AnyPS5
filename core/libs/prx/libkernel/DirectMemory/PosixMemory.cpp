@@ -91,6 +91,8 @@ void* APS5_VABI mmap_nid_postfix(void* address, std::size_t length, int protecti
     if (!RoundLength(length, rounded) || (protection & ~7) != 0)
         return failed(GuestInvalid);
     const int mappingFlags = flags & ~GuestAlignedSuper;
+    if ((mappingFlags & (GuestShared | GuestPrivate)) == (GuestShared | GuestPrivate))
+        return failed(GuestInvalid);
     if (mappingFlags == (GuestPrivate | GuestAnonymous)) {
         if (descriptor != -1 || offset != 0) return failed(GuestInvalid);
         void* mapped = nullptr;
