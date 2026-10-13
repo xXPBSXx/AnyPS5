@@ -250,6 +250,8 @@ int main() {
     Require(std::strcmp(debugText, "[debug:3] %s%d literal\n") == 0);
     Require(std::fclose(captured) == 0);
     Require(pipe_nid_postfix(nullptr) == -1 && *__error_nid_postfix() == 14);
+    Require(sceKernelOpen("present.txt", 3, 0600) == static_cast<int>(0x80020016u));
+    Require(open_nid_postfix("present.txt", 3, 0600) == -1 && *__error_nid_postfix() == 22);
     int descriptors[2] = {-1, -1};
     Require(pipe_nid_postfix(descriptors) == 0 && descriptors[0] >= 0 && descriptors[1] >= 0);
     const char payload[] = {'A', '\0', '\r', '\n', '\x1a', 'Z'};
@@ -268,6 +270,7 @@ int main() {
                 Require(sceKernelLseek(end, 1, whence) == static_cast<int>(0x8002001du));
             }
         }
+        for (const int whence : {-1, 5, 100}) Require(sceKernelLseek(unseekable[0], 0, whence) == static_cast<int>(0x80020016u));
         char piped[8]{};
         Require(read_nid_postfix(unseekable[0], piped, sizeof(piped)) == 4 && std::memcmp(piped, "pipe", 4) == 0);
         Require(close_nid_postfix(unseekable[0]) == 0 && close_nid_postfix(unseekable[1]) == 0);
