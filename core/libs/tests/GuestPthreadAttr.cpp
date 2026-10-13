@@ -24,6 +24,8 @@ int APS5_VABI pthread_attr_setstacksize_nid_postfix(PthreadAttr* attr, std::size
 int APS5_VABI pthread_attr_setsolosched_np_nid_postfix(PthreadAttr* attr, int solosched);
 int APS5_VABI pthread_attr_getinheritsched_nid_postfix(const PthreadAttr* attr, int* inherit_sched);
 int APS5_VABI pthread_attr_setinheritsched_nid_postfix(PthreadAttr* attr, int inherit_sched);
+int APS5_VABI pthread_attr_setschedpolicy_nid_postfix(PthreadAttr* attr, int policy);
+int APS5_VABI pthread_attr_getschedpolicy_nid_postfix(const PthreadAttr* attr, int* policy);
 int APS5_VABI pthread_attr_getscope_nid_postfix(const PthreadAttr* attr, int* scope);
 int APS5_VABI pthread_attr_setscope_nid_postfix(PthreadAttr* attr, int scope);
 int APS5_VABI pthread_attr_get_np_nid_postfix(Pthread thread, PthreadAttr* attr);
@@ -137,6 +139,17 @@ static void CheckSchedulingAttributes() {
 
     Require(scePthreadAttrInit(&attr) == SCE_OK);
     Require(pthread_attr_getinheritsched_nid_postfix(&attr, &inherit) == 0 && inherit == INHERIT_SCHED);
+    int policy = -1;
+    Require(pthread_attr_setschedpolicy_nid_postfix(nullptr, 1) == GUEST_EINVAL);
+    Require(pthread_attr_setschedpolicy_nid_postfix(&attr, 0) == GUEST_ENOTSUP);
+    Require(pthread_attr_setschedpolicy_nid_postfix(&attr, 4) == GUEST_ENOTSUP);
+    Require(pthread_attr_setschedpolicy_nid_postfix(&attr, -1) == GUEST_ENOTSUP);
+    for (const int accepted : {1, 2, 3}) {
+        Require(pthread_attr_setschedpolicy_nid_postfix(&attr, accepted) == 0);
+        Require(pthread_attr_getschedpolicy_nid_postfix(&attr, &policy) == 0 && policy == accepted);
+    }
+    Require(pthread_attr_setschedpolicy_nid_postfix(&attr, 99) == GUEST_ENOTSUP);
+    Require(pthread_attr_getschedpolicy_nid_postfix(&attr, &policy) == 0 && policy == 3);
     Require(pthread_attr_setinheritsched_nid_postfix(&attr, 1) == GUEST_ENOTSUP);
     Require(pthread_attr_setinheritsched_nid_postfix(&attr, -1) == GUEST_ENOTSUP);
     Require(pthread_attr_setinheritsched_nid_postfix(&attr, EXPLICIT_SCHED) == 0);
