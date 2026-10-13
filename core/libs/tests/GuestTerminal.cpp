@@ -154,6 +154,7 @@ int main() {
     Require(Fails(tcsetattr_nid_postfix(-1, 3, attributes), InvalidArgument));
     Require(Fails(tcsetattr_nid_postfix(file, Now, nullptr), BadAddress));
     Require(Fails(tcsetattr_nid_postfix(-1, Now, nullptr), BadAddress));
+    Require(Fails(tcsetattr_nid_postfix(file, Soft | Now, nullptr), BadAddress));
     Require(Fails(tcgetattr_nid_postfix(-1, attributes), BadDescriptor));
     Require(Fails(tcsetattr_nid_postfix(-1, Now, attributes), BadDescriptor));
     for (const int descriptor : {file, -1}) {
