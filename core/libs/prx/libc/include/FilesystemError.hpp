@@ -1,6 +1,8 @@
 #ifndef CORE_LIBS_PRX_LIBC_INCLUDE_FILESYSTEMERROR_HPP
 #define CORE_LIBS_PRX_LIBC_INCLUDE_FILESYSTEMERROR_HPP
 
+#include <filesystem>
+#include <string>
 #include <system_error>
 #include "General.hpp"
 
@@ -31,6 +33,20 @@ inline int ResolvePathError_nid_no_patch(const char* path, std::filesystem::path
         if (error.code() == std::errc::illegal_byte_sequence) return 2;
         return FilesystemError(error.code());
     }
+}
+
+inline int RenameDotError_nid_no_patch(const char* path) {
+    std::size_t length = std::char_traits<char>::length(path);
+    while (length > 1 && path[length - 1] == '/') --length;
+    std::size_t start = length;
+    while (start > 0 && path[start - 1] != '/') --start;
+    if (length - start != 1 || path[start] != '.') return 0;
+    const std::string parent = start == 0 ? std::string(".") : std::string(path, start);
+    std::filesystem::path resolved;
+    if (const int error = ResolvePathError_nid_no_patch(parent.c_str(), resolved)) return error;
+    std::error_code status;
+    if (!std::filesystem::exists(resolved, status)) return 2;
+    return std::filesystem::is_directory(resolved, status) ? 22 : 20;
 }
 
 #endif
