@@ -143,6 +143,14 @@ void RequireHostDirectory(WorkingDirectory& state, const std::filesystem::path& 
 }
 std::filesystem::path Resolve(WorkingDirectory& state, const char* path) {
     std::string text(path);
+    constexpr std::size_t MaxPath = 1024;
+    constexpr std::size_t MaxName = 255;
+    std::size_t name = 0;
+    for (const char character : text) {
+        name = character == '/' || character == '\\' ? 0 : name + 1;
+        if (name > MaxName) throw std::filesystem::filesystem_error("Guest path name is too long", std::make_error_code(std::errc::filename_too_long));
+    }
+    if (text.size() >= MaxPath) throw std::filesystem::filesystem_error("Guest path is too long", std::make_error_code(std::errc::filename_too_long));
     for (auto& character : text) if (character == '\\') character = '/';
     std::filesystem::path input(text);
 #ifdef _WIN32
