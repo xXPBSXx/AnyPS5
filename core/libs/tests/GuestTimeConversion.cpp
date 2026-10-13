@@ -205,6 +205,23 @@ static void CheckFreeBsdConversions() {
     Require(strftime_nid_postfix(tooSmall, sizeof(tooSmall), "%k:%l", &guest) == 0, "strftime accepted an undersized buffer");
 }
 
+static void CheckPaddingFlags() {
+    const std::int64_t timer = 1233975845;
+    GuestTm guest{};
+    Require(gmtime_s_nid_postfix(&timer, &guest) == &guest, "UTC conversion failed");
+    CheckFormat(guest, "%d|%e|%H|%I|%j|%k|%l|%M|%m|%S|%U|%W|%V", "07| 7|03|03|038| 3| 3|04|02|05|05|05|06");
+    CheckFormat(guest, "%-d|%-e|%-H|%-I|%-j|%-k|%-l|%-M|%-m|%-S|%-U|%-W|%-V", "7|7|3|3|38|3|3|4|2|5|5|5|6");
+    CheckFormat(guest, "%_d|%_e|%_H|%_I|%_j|%_k|%_l|%_M|%_m|%_S|%_U|%_W|%_V", " 7| 7| 3| 3| 38| 3| 3| 4| 2| 5| 5| 5| 6");
+    CheckFormat(guest, "%0d|%0e|%0H|%0I|%0j|%0k|%0l|%0M|%0m|%0S|%0U|%0W|%0V", "07|07|03|03|038|03|03|04|02|05|05|05|06");
+    CheckFormat(guest, "%-Ed|%_Od|%E-e|%O0k", "7| 7|7|03");
+    CheckFormat(guest, "%-y|%_Y|%0C|%-D|%_T|%0F", "09|2009|20|02/07/09|03:04:05|2009-02-07");
+    CheckFormat(guest, "%-a|%_b|%0p|%-n|%_t", "Sat|Feb|AM|\n|\t");
+    CheckFormat(guest, "%-s|%_v|%0+", "1233968645| 7-Feb-2009|Sat Feb  7 03:04:05 UTC 2009");
+    CheckFormat(guest, "[%-d] [%_m]", "[7] [ 2]");
+    CheckBufferSize(guest, "%-d", 1);
+    CheckBufferSize(guest, "%_j", 3);
+}
+
 static void CheckLiteralConversions() {
     const std::int64_t timer = 1700000000;
     GuestTm guest{};
@@ -373,6 +390,7 @@ int main() {
 
     CheckFreeBsdConversions();
     CheckLocalRange();
+    CheckPaddingFlags();
     CheckLiteralConversions();
 
     CheckConcurrent(libc_gmtime_nid_postfix, gmtime_s_nid_postfix, "Concurrent libc_gmtime returned another thread's date");

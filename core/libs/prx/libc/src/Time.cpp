@@ -136,12 +136,14 @@ struct FormatConversion {
     char specifier;
     bool literal;
     bool padded;
+    char padFlag;
 };
 
 FormatConversion parseConversion(const char* afterPercent) {
     const char* cursor = afterPercent;
     bool alternative = false;
     bool padded = false;
+    char padFlag = '\0';
     while (*cursor != '\0') {
         if (*cursor == 'E' || *cursor == 'O') {
             if (alternative) break;
@@ -149,22 +151,66 @@ FormatConversion parseConversion(const char* afterPercent) {
         } else if (*cursor == '-' || *cursor == '_' || *cursor == '0') {
             if (padded) break;
             padded = true;
+            padFlag = *cursor;
         } else {
             break;
         }
         ++cursor;
     }
     if (*cursor == '\0')
-        return {static_cast<std::size_t>(cursor - afterPercent), cursor[-1], true, padded};
+        return {static_cast<std::size_t>(cursor - afterPercent), cursor[-1], true, padded, padFlag};
     const bool literal = *cursor == '%' || std::strchr("aAbBcCdDeFgGhHIjklmMnprRsStTuUVvWwXxyYzZ+", *cursor) == nullptr;
-    return {static_cast<std::size_t>(cursor - afterPercent) + 1, *cursor, literal, padded};
+    return {static_cast<std::size_t>(cursor - afterPercent) + 1, *cursor, literal, padded, padFlag};
+}
+
+bool isPaddedConversion(char specifier) {
+    return std::strchr("dejHIklMmSUVW", specifier) != nullptr;
+}
+
+int isoWeek(const GuestTm& guest) {
+    std::int64_t year = guest.tm_year;
+    std::int64_t base = 1900;
+    int yday = guest.tm_yday;
+    for (;;) {
+        const int length = isLeapYear(year + base) ? 366 : 365;
+        const int bottom = ((yday + 11 - guest.tm_wday) % 7) - 3;
+        int top = bottom - (length % 7);
+        if (top < -3) top += 7;
+        top += length;
+        if (yday >= top) return 1;
+        if (yday >= bottom) return 1 + (yday - bottom) / 7;
+        --base;
+        yday += isLeapYear(year + base) ? 366 : 365;
+    }
+}
+
+std::string paddedConversion(char specifier, char padFlag, const GuestTm& guest) {
+    int value = 0;
+    int width = 2;
+    switch (specifier) {
+    case 'd': case 'e': value = guest.tm_mday; break;
+    case 'H': case 'k': value = guest.tm_hour; break;
+    case 'I': case 'l': value = guest.tm_hour % 12 == 0 ? 12 : guest.tm_hour % 12; break;
+    case 'j': value = guest.tm_yday + 1; width = 3; break;
+    case 'M': value = guest.tm_min; break;
+    case 'm': value = guest.tm_mon + 1; break;
+    case 'S': value = guest.tm_sec; break;
+    case 'U': value = (guest.tm_yday + 7 - guest.tm_wday) / 7; break;
+    case 'W': value = (guest.tm_yday + 7 - (guest.tm_wday != 0 ? guest.tm_wday - 1 : 6)) / 7; break;
+    default: value = isoWeek(guest); break;
+    }
+    char text[32];
+    if (padFlag == '-') std::snprintf(text, sizeof(text), "%d", value);
+    else if (padFlag == '_') std::snprintf(text, sizeof(text), "%*d", width, value);
+    else std::snprintf(text, sizeof(text), "%0*d", width, value);
+    return text;
 }
 
 bool requiresFreeBsdExpansion(const char* format) {
     while (*format != '\0') {
         if (*format++ != '%') continue;
         const auto conversion = parseConversion(format);
-        if (conversion.literal || (!conversion.padded && isFreeBsdConversion(conversion.specifier))) return true;
+        if (conversion.literal || conversion.padded || isFreeBsdConversion(conversion.specifier)) return true;
         format += conversion.length;
     }
     return false;
@@ -194,7 +240,18 @@ std::string expandFreeBsdConversions(const char* format, const GuestTm& guest) {
             format += conversion.length;
             continue;
         }
-        if (conversion.padded || !isFreeBsdConversion(conversion.specifier)) {
+        if (conversion.padded && isPaddedConversion(conversion.specifier)) {
+            result += paddedConversion(conversion.specifier, conversion.padFlag, guest);
+            format += conversion.length;
+            continue;
+        }
+        if (conversion.padded && !isFreeBsdConversion(conversion.specifier)) {
+            result += '%';
+            result += conversion.specifier;
+            format += conversion.length;
+            continue;
+        }
+        if (!isFreeBsdConversion(conversion.specifier)) {
             result.append(format - 1, conversion.length + 1);
             format += conversion.length;
             continue;
