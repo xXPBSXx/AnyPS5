@@ -333,7 +333,7 @@ void resolveTableImage(const IrResourcePlan& plan, std::uint32_t imageIndex, con
     const ShaderBufferResource heap = decodeBufferDescriptor(heapValue);
     const std::uint64_t heapSize = heap.GetSize();
     if (heap.Type() != 0u || heap.Base48() > std::numeric_limits<std::uint64_t>::max() - heapSize) throw std::runtime_error("bindless heap buffer is invalid");
-    std::uint64_t entryBytes = TableEntryBytes;
+    std::uint64_t entryBytes = table.entryStride;
     std::uint32_t entries = 0u;
     if (table.indexed) {
         if (heap.NumRecords() != 0u) {
@@ -343,8 +343,8 @@ void resolveTableImage(const IrResourcePlan& plan, std::uint32_t imageIndex, con
             entries = heap.NumRecords();
         }
     } else {
-        if (heapSize != 0u && (heapSize < table.entryOffset || (heapSize - table.entryOffset) % TableEntryBytes != 0u)) throw std::runtime_error("bindless heap contains a partial descriptor");
-        entries = heapSize > table.entryOffset ? static_cast<std::uint32_t>(std::min<std::uint64_t>((heapSize - table.entryOffset) / TableEntryBytes, std::numeric_limits<std::uint32_t>::max())) : 0u;
+        if (heapSize != 0u && (heapSize < table.entryOffset + TableEntryBytes || (heapSize - table.entryOffset - TableEntryBytes) % table.entryStride != 0u)) throw std::runtime_error("bindless heap contains a partial descriptor");
+        entries = heapSize >= table.entryOffset + TableEntryBytes ? static_cast<std::uint32_t>(std::min<std::uint64_t>((heapSize - table.entryOffset - TableEntryBytes) / table.entryStride + 1u, std::numeric_limits<std::uint32_t>::max())) : 0u;
     }
     const auto readWord = [&](std::uint64_t address, std::uint32_t& word) {
         if (!runtime.readMemory(runtime.userContext, address, &word)) {
