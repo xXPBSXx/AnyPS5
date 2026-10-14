@@ -198,9 +198,11 @@ void File::SharePositionedTransfer(int from, int to) {
     g_positionedLocks[to] = source;
 }
 std::int64_t NativePositioned_nid_no_patch(int descriptor, void* buf, std::size_t nbytes, std::int64_t offset, bool write) {
-    if (nbytes > static_cast<std::size_t>(std::numeric_limits<DWORD>::max())) {
-        throw std::runtime_error("NativePositioned: nbytes exceeds platform limit");
+    if (nbytes > File::GuestIoSizeMax) {
+        errno = EINVAL;
+        return -1;
     }
+    nbytes = std::min(nbytes, File::HostTransferLimit);
     if (write) {
         const auto result = File::PwriteSharedMemory_nid_no_patch(descriptor, buf, nbytes, offset);
         if (result != -2) return result;
@@ -234,9 +236,11 @@ std::int64_t NativePositioned_nid_no_patch(int descriptor, void* buf, std::size_
     return done;
 }
 static std::int64_t NativeTransfer(int descriptor, void* buf, std::size_t nbytes, bool write) {
-    if (nbytes > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
-        throw std::runtime_error("NativeTransfer: nbytes exceeds platform limit");
+    if (nbytes > File::GuestIoSizeMax) {
+        errno = EINVAL;
+        return -1;
     }
+    nbytes = std::min(nbytes, File::HostTransferLimit);
     const auto positioned = File::LockPositionedTransfer(descriptor);
     if (write) {
         const auto result = File::WriteSharedMemory_nid_no_patch(descriptor, buf, nbytes);
@@ -800,6 +804,7 @@ int64_t APS5_VABI pread_nid_postfix(int d, void* buf, size_t nbytes, int64_t off
     if (buf == nullptr && nbytes != 0) return PosixFailure(GUEST_EFAULT);
     if (offset < 0) return PosixFailure(GUEST_EINVAL);
     if (FailPosixPositionedGuestSocket(d)) return -1;
+    if (nbytes > File::GuestIoSizeMax) return PosixFailure(GUEST_EINVAL);
     const GuestArena::HostWrite destination(buf, nbytes);
     if (!destination.Open()) return PosixFailure(GUEST_EFAULT);
     if (File::ReadRandomDevice(d, buf, nbytes)) return static_cast<int64_t>(nbytes);
@@ -1034,6 +1039,7 @@ int64_t APS5_VABI sceKernelPread(int d, void* buf, size_t nbytes, int64_t offset
     if (buf == nullptr && nbytes != 0) return SceErrorFromErrno(GUEST_EFAULT);
     if (offset < 0) return SceErrorFromErrno(GUEST_EINVAL);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
+    if (nbytes > File::GuestIoSizeMax) return SceErrorFromErrno(GUEST_EINVAL);
     const GuestArena::HostWrite destination(buf, nbytes);
     if (!destination.Open()) return SceErrorFromErrno(GUEST_EFAULT);
     if (File::ReadRandomDevice(d, buf, nbytes)) return static_cast<int64_t>(nbytes);
@@ -1116,6 +1122,7 @@ int64_t APS5_VABI sceKernelPread(int d, void* buf, size_t nbytes, int64_t offset
     if (buf == nullptr && nbytes != 0) return SceErrorFromErrno(GUEST_EFAULT);
     if (offset < 0) return SceErrorFromErrno(GUEST_EINVAL);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
+    if (nbytes > File::GuestIoSizeMax) return SceErrorFromErrno(GUEST_EINVAL);
     const GuestArena::HostWrite destination(buf, nbytes);
     if (!destination.Open()) return SceErrorFromErrno(GUEST_EFAULT);
     if (File::ReadRandomDevice(d, buf, nbytes)) return static_cast<int64_t>(nbytes);

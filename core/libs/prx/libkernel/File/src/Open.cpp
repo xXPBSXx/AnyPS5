@@ -53,9 +53,11 @@ static std::int64_t NativeLseek(int fd, std::int64_t offset, int whence) {
     return -1;
 }
 static int NativeRead(int fd, void* buf, std::size_t n) {
-    if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {
-        throw std::runtime_error("sceKernelRead: nbytes exceeds platform limit");
+    if (n > File::GuestIoSizeMax) {
+        errno = EINVAL;
+        return -1;
     }
+    n = std::min(n, File::HostTransferLimit);
     const auto positioned = File::LockPositionedTransfer(fd);
     const int result = ::_read(fd, buf, static_cast<unsigned int>(n));
     if (result < 0 && _doserrno == ERROR_NO_DATA) errno = EAGAIN;
@@ -66,9 +68,11 @@ static int NativeRead(int fd, void* buf, std::size_t n) {
     return result;
 }
 static int NativeWrite(int fd, const void* buf, std::size_t n) {
-    if (n > static_cast<std::size_t>(std::numeric_limits<unsigned int>::max())) {
-        throw std::runtime_error("sceKernelWrite: nbytes exceeds platform limit");
+    if (n > File::GuestIoSizeMax) {
+        errno = EINVAL;
+        return -1;
     }
+    n = std::min(n, File::HostTransferLimit);
     const auto positioned = File::LockPositionedTransfer(fd);
     const auto shared = File::WriteSharedMemory_nid_no_patch(fd, buf, n);
     if (shared != -2) return static_cast<int>(shared);
@@ -257,6 +261,7 @@ std::int64_t APS5_VABI sceKernelRead(int d, void* buf, std::size_t nbytes) {
     if (buf == nullptr) {
         throw std::invalid_argument(std::string(__func__) + ": buf is null");
     }
+    if (nbytes > File::GuestIoSizeMax) return SceIoErrorFromErrno(EINVAL);
     const GuestArena::HostWrite destination(buf, nbytes);
     if (!destination.Open()) errno = EFAULT;
     else if (File::ReadRandomDevice(d, buf, nbytes)) return static_cast<std::int64_t>(nbytes);
