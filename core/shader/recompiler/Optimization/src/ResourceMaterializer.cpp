@@ -343,7 +343,7 @@ void resolveTableImage(const IrResourcePlan& plan, std::uint32_t imageIndex, con
             entries = heap.NumRecords();
         }
     } else {
-        if (heapSize != 0u && (heapSize < table.entryOffset + TableEntryBytes || (heapSize - table.entryOffset - TableEntryBytes) % table.entryStride != 0u)) throw std::runtime_error("bindless heap contains a partial descriptor");
+        if (heapSize != 0u && (heapSize < table.entryOffset + TableEntryBytes || ((heapSize - table.entryOffset) % table.entryStride != 0u && (heapSize - table.entryOffset) % table.entryStride < TableEntryBytes))) throw std::runtime_error("bindless heap contains a partial descriptor");
         entries = heapSize >= table.entryOffset + TableEntryBytes ? static_cast<std::uint32_t>(std::min<std::uint64_t>((heapSize - table.entryOffset - TableEntryBytes) / table.entryStride + 1u, std::numeric_limits<std::uint32_t>::max())) : 0u;
     }
     const auto readWord = [&](std::uint64_t address, std::uint32_t& word) {
