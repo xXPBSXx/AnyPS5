@@ -7,6 +7,7 @@
 #include "prx/libSceAgcDriver/Graphics/include/VertexInput.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/Draw.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/BufferPool.hpp"
+#include "prx/libSceAgcDriver/Graphics/include/GuestBufferMemory.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/DepthSurface.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/MultisampleTarget.hpp"
 #include "prx/libSceAgcDriver/Graphics/include/ShaderInputState.hpp"
@@ -22,6 +23,7 @@
 #include "BdaAbi.hpp"
 #include "prx/libc/include/GuestAllocations.hpp"
 #include "prx/libc/include/general/VabiMacros.hpp"
+#include "prx/libc/include/GuestHeap.hpp"
 #include <spirv/unified1/spirv.hpp>
 #include <algorithm>
 #include <array>
@@ -1028,6 +1030,16 @@ void PixelInputLayoutTests() {
     Require(!readsBuiltin(read, spv::BuiltInFragCoord) && !readsBuiltin(read, spv::BuiltInBaryCoordKHR), "an ADDR-only centroid pair was loaded");
 }
 
+void BlendBypassTests() {
+    auto queue = makeState();
+    for (std::uint32_t constant = 0x105; constant < 0x109; ++constant) queue.context[constant] = 0;
+    queue.context[0x1e0] = (1u << 30u) | 4u | (5u << 8u);
+    Require(AgcDriver::Graphics::DecodeState(queue).blends.at(0).blendEnable, "enabled blending was not decoded");
+    queue.context[0x31c] |= 0x10000u;
+    const auto bypassed = AgcDriver::Graphics::DecodeState(queue);
+    Require(!bypassed.blends.at(0).blendEnable && bypassed.blends.at(0).colorWriteMask != 0, "a target with BLEND_BYPASS still blends");
+}
+
 void OpaqueDestinationAlphaTests() {
     auto queue = makeState();
     for (std::uint32_t constant = 0x105; constant < 0x109; ++constant) queue.context[constant] = 0;
@@ -1741,6 +1753,15 @@ void metadataPassTests() {
     queue.context[0x0] = 0;
     queue.context[0x200] = 0x70;
     Require(DecodeColorMetadataPass(queue).has_value(), "an always-pass depth function without a test refused the pass");
+    auto bound = queue;
+    bound.context[0x010] = 0x3;
+    bound.context[0x011] = 0x1;
+    bound.context[0x200] = 0x72;
+    Require(DecodeColorMetadataPass(bound).has_value(), "an always-pass depth test without writes refused the pass");
+    bound.context[0x200] = 0x76;
+    expectFailure([&] { DecodeColorMetadataPass(bound); }, "depth or stencil work");
+    bound.context[0x200] = 0x7a;
+    expectFailure([&] { DecodeColorMetadataPass(bound); }, "depth or stencil work");
     queue.context[0x91] = 0x40020;
     expectFailure([&] { DecodeColorMetadataPass(queue); }, "over part of a color target");
     queue.context[0x91] = 0x40040;
@@ -1906,6 +1927,16 @@ void cmaskTests() {
     auto mipmapped = queue;
     mipmapped.context[0x3b0] |= 1u << 28u;
     expectFailure([&] { DecodeColorBuffer(mipmapped.context, 0); }, "mipmapped, 3D or array");
+    constexpr std::size_t blockBytes = 65536u;
+    static std::vector<std::byte> mipStorage(16u * blockBytes);
+    const auto mipBase = (reinterpret_cast<std::uintptr_t>(mipStorage.data()) + blockBytes - 1u) / blockBytes * blockBytes;
+    auto higherMip = queue;
+    higherMip.context[0x318] = static_cast<std::uint32_t>(mipBase >> 8u);
+    higherMip.context[0x390] = static_cast<std::uint32_t>(mipBase >> 40u);
+    higherMip.context[0x3b0] = (4u << 28u) | (255u << 14u) | 127u;
+    higherMip.context[0x31b] = 1u << 26u;
+    const auto higherTarget = DecodeColorBuffer(higherMip.context, 0);
+    Require(!higherTarget.cmaskFastClear && higherTarget.cmaskAddress == 0, "a higher mip of a fast-clear target decoded a CMASK");
     auto unaddressed = queue;
     unaddressed.context[0x31f] = 0;
     unaddressed.context[0x398] = 0;
@@ -2878,6 +2909,32 @@ AgcDriver::Graphics::Context mockContext() {
     context.limits.maxPerStageResources = 128;
     context.limits.maxDescriptorSetStorageBuffers = 32;
     return context;
+}
+
+void addressSpaceTeardownTests() {
+#ifdef _WIN32
+    _putenv_s("APS5_NO_LEASE_MIRROR", "1");
+#else
+    setenv("APS5_NO_LEASE_MIRROR", "1", 1);
+#endif
+    auto context = mockContext();
+    context.device = makeHandle<VkDevice>();
+    context.bufferDeviceAddress = true;
+    context.limits.maxStorageBufferRange = 1u << 27;
+    void* block = GuestHeap::GuestHeapAlignForGpu_nid_postfix(16, 64);
+    const auto before = AgcDriver::Graphics::LeaseCounters().cacheDrops;
+    {
+        AgcDriver::Graphics::GuestBufferMemory memory(context);
+        memory.AcquireRegistered();
+        Require(memory.HoldsLease(), "address-based build holds no lease before device teardown");
+        memory.Upload(true);
+        memory.WriteBack();
+        Require(!memory.HoldsLease(), "completed address-based build kept its own lease");
+    }
+    AgcDriver::Graphics::ClearImageMirrors(context.device);
+    GuestHeap::GuestHeapFree_nid_postfix(block);
+    Require(AgcDriver::Graphics::LeaseCounters().cacheDrops == before, "device teardown left the cached address space pinning guest allocations");
+    Require(mock.live == 0, "address-space teardown test leaked Vulkan objects");
 }
 
 using Role = ShaderRecompiler::DescriptorRole;
@@ -5595,6 +5652,21 @@ int main(int argc, char** argv) {
             std::cout << "sparse buffer hole tests " << (passed ? "passed" : "failed") << '\n';
             return passed ? 0 : 1;
         }
+        if (argc == 2 && std::string_view(argv[1]) == "--address-space-teardown") {
+            addressSpaceTeardownTests();
+            std::cout << "address-space device teardown releases cached guest allocations\n";
+            return 0;
+        }
+        {
+            AgcDriver::Graphics::PipelineCacheSynchronization synchronization;
+            auto pipelineUse = synchronization.LockForPipelineUse();
+            bool snapshotAcquired = false;
+            std::thread snapshot([&] { snapshotAcquired = synchronization.TryLockForSnapshot().owns_lock(); });
+            snapshot.join();
+            Require(!snapshotAcquired, "pipeline cache snapshot overlapped pipeline creation");
+            pipelineUse.unlock();
+            Require(synchronization.TryLockForSnapshot().owns_lock(), "pipeline cache snapshot stayed blocked after pipeline creation finished");
+        }
         if (argc == 2 && std::string_view(argv[1]) == "--descriptor-layout-flags") {
             descriptorLayoutFlagTests();
             std::cout << "Descriptor layout native and captured binding flags passed\n";
@@ -5667,6 +5739,7 @@ int main(int argc, char** argv) {
         DisabledColorTests();
         OpaqueDestinationAlphaTests();
         Color1555TargetTests();
+        BlendBypassTests();
         CompactedExportTests();
         ReversedComponentOrderTests();
         ShadersWriteMemoryTests();
