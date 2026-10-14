@@ -27,6 +27,8 @@ std::int64_t NativePositioned_nid_no_patch(int descriptor, void* buf, std::size_
 bool DescriptorIsOpen_nid_no_patch(int descriptor);
 
 namespace File {
+constexpr std::size_t HostTransferLimit = 0x7ffff000;
+constexpr std::size_t GuestIoSizeMax = static_cast<std::size_t>(INT64_MAX);
 int HostStandardError();
 [[nodiscard]] std::unique_lock<std::mutex> LockPositionedTransfer(int descriptor);
 void SharePositionedTransfer(int from, int to);
