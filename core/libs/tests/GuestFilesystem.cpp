@@ -1155,6 +1155,12 @@ int main() {
         Require(lstat_nid_postfix(blocked->c_str(), &blockedStatus) == -1 && *__error_nid_postfix() == expected);
         Require(access_nid_postfix(blocked->c_str(), 0) == -1 && *__error_nid_postfix() == expected);
         Require(unlink_nid_postfix(blocked->c_str()) == -1 && *__error_nid_postfix() == expected);
+        Require(remove_nid_postfix(blocked->c_str()) == -1 && *__error_nid_postfix() == expected);
+        Require(opendir_nid_postfix(blocked->c_str()) == nullptr && *__error_nid_postfix() == expected);
+        Require(chdir_nid_postfix(blocked->c_str()) == -1 && *__error_nid_postfix() == expected);
+        for (const char* openMode : {"r", "w"}) {
+            Require(fopen_nid_postfix(blocked->c_str(), openMode) == nullptr && *__error_nid_postfix() == expected);
+        }
     }
 #ifndef _WIN32
     const auto linkedDirectory = root / "linked-directory";
