@@ -35,6 +35,7 @@ extern "C" {
 int APS5_VABI sceKernelOpen(const char*, int, std::uint16_t);
 int APS5_VABI sceKernelClose(int);
 int APS5_VABI dup_nid_postfix(int);
+int APS5_VABI pipe_nid_postfix(int*);
 std::int64_t APS5_VABI sceKernelRead(int, void*, std::size_t);
 std::int64_t APS5_VABI sceKernelPread(int, void*, std::size_t, std::int64_t);
 int APS5_VABI sceKernelLseek(int, std::int64_t, int);
@@ -299,6 +300,17 @@ int main() {
     Require(pwrite_nid_disambig1_nid_postfix(file, &byte, 1, -1) == -1 && *__error_nid_postfix() == 22);
     Require(pread_nid_postfix(9999, &byte, 1, 0) == -1 && *__error_nid_postfix() == 9);
     Require(pwrite_nid_disambig1_nid_postfix(9999, &byte, 1, 0) == -1 && *__error_nid_postfix() == 9);
+    Require(sceKernelPreadv(9999, reads, 2, -1) == ErrorEbadf);
+    Require(sceKernelPwritev(9999, writes, 2, -1) == ErrorEbadf);
+    Require(preadv_nid_postfix(9999, reads, 2, -1) == -1 && *__error_nid_postfix() == 9);
+    Require(pwritev_nid_postfix(9999, writes, 2, -1) == -1 && *__error_nid_postfix() == 9);
+    int unseekable[2] = {-1, -1};
+    Require(pipe_nid_postfix(unseekable) == 0);
+    Require(sceKernelPreadv(unseekable[0], reads, 2, -1) == ErrorEspipe);
+    Require(sceKernelPwritev(unseekable[1], writes, 2, -1) == ErrorEspipe);
+    Require(preadv_nid_postfix(unseekable[0], reads, 2, -1) == -1 && *__error_nid_postfix() == 29);
+    Require(pwritev_nid_postfix(unseekable[1], writes, 2, -1) == -1 && *__error_nid_postfix() == 29);
+    Require(sceKernelClose(unseekable[0]) == 0 && sceKernelClose(unseekable[1]) == 0);
     Require(sceKernelFtruncate(file, -1) == ErrorEinval);
     const int readOnly = sceKernelOpen(path.string().c_str(), SCE_KERNEL_O_RDONLY, 0);
     Require(readOnly >= 0);

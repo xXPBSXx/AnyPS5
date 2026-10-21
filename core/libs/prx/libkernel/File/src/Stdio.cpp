@@ -426,6 +426,11 @@ static std::int64_t PositionedGuestSocketError(int descriptor) {
     return GuestSockets::IsOpen(descriptor) ? SceErrorFromErrno(GUEST_ESPIPE) : 0;
 }
 
+static std::int64_t NegativeOffsetError(int descriptor) {
+    const auto position = sceKernelLseek(descriptor, 0, 1);
+    return position < 0 ? position : SceErrorFromErrno(GUEST_EINVAL);
+}
+
 static bool FailPosixPositionedGuestSocket(int descriptor) {
     if (!GuestSockets::IsOpen(descriptor)) return false;
     errno = GUEST_ESPIPE;
@@ -1271,7 +1276,7 @@ static std::int64_t TransferIovecs(int d, const KernelIovec* guestIov, int iovcn
     std::vector<KernelIovec> vectors;
     if (const int error = CopyIovecs(guestIov, iovcnt, vectors)) return error;
     const auto* iov = vectors.data();
-    if (offset != nullptr && *offset < 0) return SceErrorFromErrno(GUEST_EINVAL);
+    if (offset != nullptr && *offset < 0) return NegativeOffsetError(d);
     std::size_t total = 0;
     for (int i = 0; i < iovcnt; ++i) {
         if (iov[i].base == nullptr && iov[i].length != 0) return SceErrorFromErrno(GUEST_EFAULT);
@@ -1401,7 +1406,7 @@ int64_t APS5_VABI sceKernelPreadv(int d, const KernelIovec* guestIov, int iovcnt
     std::vector<KernelIovec> vectors;
     if (const int error = CopyIovecs(guestIov, iovcnt, vectors)) return error;
     const auto* iov = vectors.data();
-    if (offset < 0) return SceErrorFromErrno(GUEST_EINVAL);
+    if (offset < 0) return NegativeOffsetError(d);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
     std::deque<GuestArena::HostWrite> destinations;
     if (!OpenIovecs(iov, iovcnt, destinations)) return SceErrorFromErrno(GUEST_EFAULT);
@@ -1415,7 +1420,7 @@ int64_t APS5_VABI sceKernelPwritev(int d, const KernelIovec* guestIov, int iovcn
     std::vector<KernelIovec> vectors;
     if (const int error = CopyIovecs(guestIov, iovcnt, vectors)) return error;
     const auto* iov = vectors.data();
-    if (offset < 0) return SceErrorFromErrno(GUEST_EINVAL);
+    if (offset < 0) return NegativeOffsetError(d);
     if (const auto error = PositionedGuestSocketError(d); error != 0) return error;
     PrepareWriteIovecs(iov, iovcnt);
     const auto sharedResult = File::PwritevSharedMemory_nid_no_patch(d, NativeIovecs(iov), iovcnt, offset);
