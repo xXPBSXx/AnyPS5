@@ -615,7 +615,9 @@ int main() {
     { std::ofstream stream(otherDir / "item.txt"); }
     Require(renameat_nid_postfix(base, "sub_renamed", base, "other_dir") == -1 && Error() == 66);
     Require(renameat_nid_postfix(subFd, "nested.bin/", base, "back.bin") == -1 && Error() == 20);
-    Require(renameat_nid_postfix(subFd, "nested.bin", base, "nonexistent/") == -1 && Error() == 20);
+    Require(renameat_nid_postfix(subFd, "nested.bin", base, "nonexistent/") == -1 && Error() == 2);
+    Require(renameat_nid_postfix(subFd, "nested.bin", base, "file.txt/") == -1 && Error() == 20);
+    Require(std::filesystem::is_regular_file(root / "sub_renamed" / "nested.bin") && std::filesystem::is_regular_file(root / "file.txt"));
     Require(renameat_nid_postfix(subFd, "nested.bin", base, "made.bin") == 0);
     Require(std::filesystem::is_regular_file(root / "made.bin"));
     Require(sceKernelClose(subFd) == 0);

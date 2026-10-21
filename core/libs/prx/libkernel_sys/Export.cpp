@@ -680,8 +680,12 @@ int APS5_VABI renameat_nid_postfix(int oldfd, const char* from, int newfd, const
         if (!std::filesystem::is_directory(sourceStatus)) return static_cast<int>(Fail(GuestEnotdir));
     }
     if (newTrailingSlash && sourceStatus.type() != std::filesystem::file_type::not_found &&
-        !std::filesystem::is_directory(sourceStatus))
-        return static_cast<int>(Fail(GuestEnotdir));
+        !std::filesystem::is_directory(sourceStatus)) {
+        std::error_code destinationError;
+        const auto destinationStatus = std::filesystem::symlink_status(destination, destinationError);
+        const bool missing = destinationStatus.type() == std::filesystem::file_type::not_found && !HasNonDirectoryPrefix(destination);
+        return static_cast<int>(Fail(missing ? GuestEnoent : GuestEnotdir));
+    }
 
     const int error = RenamePath(source, destination);
     if (error) return static_cast<int>(Fail(error));
