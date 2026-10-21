@@ -13,6 +13,8 @@ int APS5_VABI getitimer_nid_postfix(int, void*);
 int APS5_VABI setitimer_nid_postfix(int, const void*, void*);
 int APS5_VABI sceKernelGettimeofday(void*);
 int APS5_VABI sceKernelGettimezone(void*);
+int APS5_VABI pipe_nid_postfix(int*);
+int APS5_VABI close_nid_postfix(int);
 int* APS5_VABI __error_nid_postfix();
 }
 
@@ -53,6 +55,16 @@ int main() {
         Require(sceKernelGettimeofday(bad) == KernelEfault);
         Require(sceKernelGettimezone(bad) == KernelEfault);
     }
+    int first[2]{-1, -1};
+    Require(pipe_nid_postfix(first) == 0);
+    Require(close_nid_postfix(first[0]) == 0 && close_nid_postfix(first[1]) == 0);
+    for (const std::uintptr_t address : {std::uintptr_t{1}, ~std::uintptr_t{0xfff}}) {
+        *__error_nid_postfix() = 0;
+        Require(Efault(pipe_nid_postfix(reinterpret_cast<int*>(address))));
+    }
+    int second[2]{-1, -1};
+    Require(pipe_nid_postfix(second) == 0 && second[0] == first[0] && second[1] == first[1]);
+    Require(close_nid_postfix(second[0]) == 0 && close_nid_postfix(second[1]) == 0);
     Require(getrlimit_nid_postfix(2, valid) == 0);
     Require(getrusage_nid_postfix(0, valid) == 0);
     Require(gettimeofday_nid_postfix(valid, valid + 32) == 0);
