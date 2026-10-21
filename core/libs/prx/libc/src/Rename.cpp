@@ -114,8 +114,14 @@ extern "C" int RenameGuestPath_nid_no_patch(const char* from, const char* to) {
             errno = sourceError ? sourceError : destinationError;
             return -1;
         }
-        const auto destination = ResolvePath_nid_no_patch(to);
+        auto destination = ResolvePath_nid_no_patch(to);
         if (NamesNonDirectoryWithSlash_nid_no_patch(source) || (std::filesystem::exists(source) && NamesNonDirectoryWithSlash_nid_no_patch(destination))) { errno = 20; return -1; }
+        if (!destination.has_filename() && destination.has_relative_path()) {
+            std::error_code sourceError;
+            if (std::filesystem::is_directory(std::filesystem::symlink_status(source, sourceError))) {
+                while (!destination.has_filename() && destination.has_relative_path()) destination = destination.parent_path();
+            }
+        }
         int error = RenamePath_nid_no_patch(source, destination);
         if (error == 2) {
             std::error_code status;
