@@ -534,7 +534,7 @@ int APS5_VABI sysarch(int operation, void* parameters) {
 #endif
 }
 
-int APS5_VABI getrusage_nid_postfix(int who, GuestResourceUsage* usage) {
+static int GetrusageInto(int who, GuestResourceUsage* usage) {
     if (who != -1 && who != 0 && who != 1) {
         *__error_nid_postfix() = guestInvalid;
         return -1;
@@ -608,7 +608,17 @@ int APS5_VABI getrusage_nid_postfix(int who, GuestResourceUsage* usage) {
     return 0;
 }
 
-int APS5_VABI getrlimit_nid_postfix(int resource, GuestResourceLimit* limit) {
+int APS5_VABI getrusage_nid_postfix(int who, GuestResourceUsage* usage) {
+    GuestResourceUsage result{};
+    const int status = GetrusageInto(who, usage == nullptr ? nullptr : &result);
+    if (status == 0 && !GuestCopyOut_nid_no_patch(usage, &result, sizeof(result))) {
+        *__error_nid_postfix() = guestFault;
+        return -1;
+    }
+    return status;
+}
+
+static int GetrlimitInto(int resource, GuestResourceLimit* limit) {
     if (resource < 0 || resource >= guestRlimitCount) {
         *__error_nid_postfix() = guestInvalid;
         return -1;
@@ -673,6 +683,16 @@ int APS5_VABI getrlimit_nid_postfix(int resource, GuestResourceLimit* limit) {
     default:
         throw std::runtime_error("getrlimit: unsupported resource " + std::to_string(resource));
     }
+}
+
+int APS5_VABI getrlimit_nid_postfix(int resource, GuestResourceLimit* limit) {
+    GuestResourceLimit result{};
+    const int status = GetrlimitInto(resource, limit == nullptr ? nullptr : &result);
+    if (status == 0 && !GuestCopyOut_nid_no_patch(limit, &result, sizeof(result))) {
+        *__error_nid_postfix() = guestFault;
+        return -1;
+    }
+    return status;
 }
 
 int APS5_VABI getpriority_nid_postfix(int which, int who) {
