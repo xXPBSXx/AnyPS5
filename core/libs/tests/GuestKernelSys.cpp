@@ -775,6 +775,14 @@ int main() {
     Require(kqueueDescriptor >= 0);
     Require(fchown_nid_postfix(kqueueDescriptor, 0, 0) == -1 && Error() == 22);
     Require(close_nid_postfix(kqueueDescriptor) == 0);
+    int chownPipe[2];
+    Require(pipe_nid_postfix(chownPipe) == 0);
+    Require(fchown_nid_postfix(chownPipe[0], 0, 0) == -1 && Error() == 22);
+    Require(close_nid_postfix(chownPipe[0]) == 0 && close_nid_postfix(chownPipe[1]) == 0);
+    const int chownSocket = socket_nid_postfix(2, 2, 0);
+    Require(chownSocket >= 0);
+    Require(fchown_nid_postfix(chownSocket, 0, 0) == -1 && Error() == 22);
+    Require(close_nid_postfix(chownSocket) == 0);
     bool fchownThrew = false;
     try { fchown_nid_postfix(base, 1, 0); } catch (const std::exception&) { fchownThrew = true; }
     Require(fchownThrew);
