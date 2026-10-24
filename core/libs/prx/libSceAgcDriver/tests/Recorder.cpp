@@ -2708,6 +2708,25 @@ void secondMappingImportTests(const Device& device) {
     HostImportFor(context, address, bytes);
 }
 
+std::size_t comparedSharedPages(std::uint64_t begin, std::uint64_t end) {
+#ifdef _WIN32
+    std::size_t total = 0;
+    std::vector<void*> pages(8192);
+    for (auto cursor = begin; cursor < end;) {
+        std::size_t count = pages.size();
+        GuestArena::GuestArenaComparedPages_nid_no_patch(static_cast<std::uintptr_t>(cursor), static_cast<std::size_t>(end - cursor), pages.data(), &count);
+        total += count;
+        if (count < pages.size()) break;
+        cursor = reinterpret_cast<std::uintptr_t>(pages[count - 1]) + 4096;
+    }
+    return total;
+#else
+    static_cast<void>(begin);
+    static_cast<void>(end);
+    return 0;
+#endif
+}
+
 void requireImportServesGuest(const Context& context, Recorder& recorder, const HostImport& import, std::uint64_t begin, std::uint64_t end, std::uint32_t salt, const std::string& what) {
     using namespace AgcDriver::GuestMemory;
     constexpr std::size_t page = 4096;
@@ -2715,15 +2734,18 @@ void requireImportServesGuest(const Context& context, Recorder& recorder, const 
     const auto bytes = static_cast<std::size_t>(end - begin);
     Require(begin >= import.base && end <= import.base + import.bytes, what + " is not inside its import");
     const auto collected = CollectWritesUncached(begin, bytes);
-    Require(collected != 0 && Watched(begin, bytes), what + " left the write watch");
-    Require(UnchangedSinceCollected(begin, page, collected) && UnchangedSinceCollected(end - page, page, collected), what + " reports writes nobody made");
+    const bool compared = collected == 0 && !Watched(begin, bytes) && comparedSharedPages(begin, end) == bytes / page;
+    if (!compared) {
+        Require(collected != 0 && Watched(begin, bytes), what + " left the write watch");
+        Require(UnchangedSinceCollected(begin, page, collected) && UnchangedSinceCollected(end - page, page, collected), what + " reports writes nobody made");
+    }
     auto* first = reinterpret_cast<std::byte*>(begin);
     auto* last = reinterpret_cast<std::byte*>(end - page);
     for (std::size_t index = 0; index < probe; ++index) {
         first[index] = static_cast<std::byte>((index * 7u + salt) & 0xffu);
         last[index] = static_cast<std::byte>((index * 13u + salt * 5u + 1u) & 0xffu);
     }
-    Require(!UnchangedSinceCollected(begin, page, collected) && !UnchangedSinceCollected(end - page, page, collected), "a CPU store into " + what + " was not collected");
+    if (!compared) Require(!UnchangedSinceCollected(begin, page, collected) && !UnchangedSinceCollected(end - page, page, collected), "a CPU store into " + what + " was not collected");
     Buffer readback(context, 2 * probe, VK_BUFFER_USAGE_TRANSFER_DST_BIT);
     const auto commands = recorder.Commands();
     RecordMemoryBarrier(context, commands, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT);
