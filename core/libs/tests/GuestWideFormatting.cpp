@@ -238,9 +238,19 @@ static void CheckWcsftime() {
         char16_t wide[128];
         const std::size_t length = strftime_nid_postfix(narrow, sizeof(narrow), item.narrow, &time);
         Require(length != 0, "wcsftime reference strftime");
-        Require(wcsftime_nid_postfix(reinterpret_cast<std::uint16_t*>(wide), 128, reinterpret_cast<const std::uint16_t*>(item.wide), &time) == length, "wcsftime length matches strftime");
-        for (std::size_t index = 0; index <= length; ++index)
-            Require(wide[index] == static_cast<unsigned char>(narrow[index]), "wcsftime output matches strftime");
+        char16_t expected[128];
+        std::size_t characters = 0;
+        for (std::size_t index = 0; index < length; ++characters) {
+            const unsigned char lead = static_cast<unsigned char>(narrow[index]);
+            const unsigned char next = static_cast<unsigned char>(narrow[index + 1]);
+            if (lead >= 0xc2 && lead < 0xe0 && (next & 0xc0) == 0x80) {
+                expected[characters] = static_cast<char16_t>(((lead & 0x1f) << 6) | (next & 0x3f));
+                index += 2;
+            } else expected[characters] = lead, ++index;
+        }
+        expected[characters] = 0;
+        Require(wcsftime_nid_postfix(reinterpret_cast<std::uint16_t*>(wide), 128, reinterpret_cast<const std::uint16_t*>(item.wide), &time) == characters, "wcsftime length matches strftime");
+        Require(std::u16string(wide) == std::u16string(expected), "wcsftime output matches strftime");
     }
     char16_t buffer[32];
     Require(wcsftime_nid_postfix(reinterpret_cast<std::uint16_t*>(buffer), 32, reinterpret_cast<const std::uint16_t*>(u"%Y-%m-%d %H:%M:%S"), &time) == 19

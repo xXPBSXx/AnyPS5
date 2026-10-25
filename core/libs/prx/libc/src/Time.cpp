@@ -410,15 +410,31 @@ char** HostZoneNames() {
 #endif
 }
 
+char* HostZoneNameUtf8(int index) {
+#ifdef _WIN32
+    static char converted[2][128];
+    char* const host = _tzname[index];
+    wchar_t wide[64];
+    char utf8[sizeof(converted[0])];
+    const int wideLength = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, host, -1, wide, 64);
+    const int utf8Length = wideLength > 0 ? WideCharToMultiByte(CP_UTF8, 0, wide, wideLength, utf8, sizeof(utf8), nullptr, nullptr) : 0;
+    if (utf8Length <= 0) return host;
+    if (std::strcmp(converted[index], utf8) != 0) std::memcpy(converted[index], utf8, static_cast<std::size_t>(utf8Length));
+    return converted[index];
+#else
+    return HostZoneNames()[index];
+#endif
+}
+
 char* GuestZoneName(int index) {
     static char unnamed[] = "   ";
-    char** names = HostZoneNames();
+    HostZoneNames();
 #ifdef _WIN32
     const bool daylightSaving = _daylight != 0;
 #else
     const bool daylightSaving = ::daylight != 0;
 #endif
-    return index == 1 && !daylightSaving ? unnamed : names[index];
+    return index == 1 && !daylightSaving ? unnamed : HostZoneNameUtf8(index);
 }
 }
 
@@ -514,7 +530,7 @@ GuestTm* APS5_VABI localtime_s_nid_postfix(const int64_t* timer, GuestTm* result
     _get_dstbias(&daylightBias);
     const bool daylight = host.tm_isdst > 0;
     result->tm_gmtoff = -static_cast<std::int64_t>(standardBias + (daylight ? daylightBias : 0));
-    result->tm_zone = _tzname[daylight ? 1 : 0];
+    result->tm_zone = HostZoneNameUtf8(daylight ? 1 : 0);
 #else
     const std::time_t t = static_cast<std::time_t>(*timer);
     if (localtime_r(&t, &host) == nullptr) {
