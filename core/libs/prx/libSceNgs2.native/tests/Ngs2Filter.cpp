@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
@@ -23,6 +24,9 @@
 #else
 #include <sys/mman.h>
 #include <unistd.h>
+#ifdef __GLIBC__
+#include <gnu/libc-version.h>
+#endif
 #endif
 
 using Response = std::array<float, 12>;
@@ -192,6 +196,21 @@ static bool SameBits(const std::vector<float>& a, const std::vector<float>& b) {
     return a.size() == b.size() && std::memcmp(a.data(), b.data(), a.size() * sizeof(float)) == 0;
 }
 
+static bool SameBitsReported(const std::vector<float>& a, const std::vector<float>& b) {
+    if (SameBits(a, b)) return true;
+    if (a.size() != b.size()) {
+        std::fprintf(stderr, "NGS2 sizes differ: %zu and %zu\n", a.size(), b.size());
+        return false;
+    }
+    for (std::size_t i = 0; i < a.size(); i++) {
+        if (std::memcmp(&a[i], &b[i], sizeof(float)) != 0) {
+            std::fprintf(stderr, "NGS2 first differing sample %zu: 0x%08x and 0x%08x\n", i, std::bit_cast<std::uint32_t>(a[i]), std::bit_cast<std::uint32_t>(b[i]));
+            break;
+        }
+    }
+    return false;
+}
+
 static void AddBlock(uintptr_t sampler, const std::vector<std::int16_t>& pcm) {
     const Ngs2WaveformBlock block{0, pcm.size() * sizeof(std::int16_t), 0, 0, static_cast<std::uint32_t>(pcm.size()), 0, 0};
     Control(sampler, SCE_NGS2_SAMPLER_VOICE_PARAM_ADD_WAVEFORM_BLOCKS, Ngs2SamplerVoiceWaveformBlocksParam{{}, pcm.data(), SCE_NGS2_WAVEFORM_BLOCKS_FLAG_RESET, 1, &block});
@@ -212,7 +231,35 @@ static std::vector<float> RenderTail(uintptr_t system) {
     return out;
 }
 
+static void ReportLowPassCoefficients() {
+    const float rate = 48000.0f;
+    const float w = (std::clamp(1000.0f, 0.0001f * rate, 0.499f * rate) / rate) * 6.28318548f;
+    const double sinDouble = std::sin(static_cast<double>(w));
+    const double cosDouble = std::cos(static_cast<double>(w));
+    const auto s = static_cast<float>(sinDouble);
+    const auto c = static_cast<float>(cosDouble);
+    const float alpha = s / (2.0f * Q);
+    const float b1 = 1.0f - c;
+    const float b0 = b1 * 0.5f;
+    const float inv = 1.0f / (1.0f + alpha);
+    const float produced[5] = {b0 * inv, b1 * inv, b0 * inv, -((-2.0f * c) * inv), -((1.0f - alpha) * inv)};
+    const float reference[5] = {LOW_PASS_1000.i0, LOW_PASS_1000.i1, LOW_PASS_1000.i2, LOW_PASS_1000.o1, LOW_PASS_1000.o2};
+#ifdef __GLIBC__
+    std::fprintf(stderr, "NGS2 diag glibc %s, compiler %s\n", gnu_get_libc_version(), __VERSION__);
+#else
+    std::fprintf(stderr, "NGS2 diag compiler %s\n", __VERSION__);
+#endif
+    std::fprintf(stderr, "NGS2 diag w=0x%08x sin(double)=0x%016llx cos(double)=0x%016llx sin(float)=0x%08x cos(float)=0x%08x\n", std::bit_cast<std::uint32_t>(w),
+        static_cast<unsigned long long>(std::bit_cast<std::uint64_t>(sinDouble)), static_cast<unsigned long long>(std::bit_cast<std::uint64_t>(cosDouble)),
+        std::bit_cast<std::uint32_t>(s), std::bit_cast<std::uint32_t>(c));
+    for (int i = 0; i < 5; i++) {
+        std::fprintf(stderr, "NGS2 diag coefficient %d computed=0x%08x reference=0x%08x%s\n", i, std::bit_cast<std::uint32_t>(produced[i]), std::bit_cast<std::uint32_t>(reference[i]),
+            std::memcmp(&produced[i], &reference[i], sizeof(float)) == 0 ? "" : " DIFFERENT");
+    }
+}
+
 static void TestLowPassAndTail() {
+    ReportLowPassCoefficients();
     const auto system = CreateSystem();
     const auto master = Mastering(system, 1);
     std::vector<std::int16_t> pcm(Grain * 2, 0);
@@ -232,17 +279,17 @@ static void TestLowPassAndTail() {
         SetFilter(sampler, param);
     }
     const auto expected = BlockModel(Delayed(pcm, 3 * Grain), LOW_PASS_1000);
-    Require(SameBits(out, expected));
+    Require(SameBitsReported(out, expected));
     Require(out[2 * Grain] != 0.0f && out[3 * Grain - 1] != 0.0f);
     for (float sample : RenderGrain(system, 1)) Require(sample == 0.0f);
     Require(Flags(sampler) == 0);
 
     AddBlock(sampler, pcm);
     Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
-    Require(SameBits(RenderTail(system), expected));
+    Require(SameBitsReported(RenderTail(system), expected));
     for (float sample : RenderGrain(system, 1)) Require(sample == 0.0f);
     Event(sampler, SCE_NGS2_VOICE_EVENT_PLAY);
-    Require(SameBits(RenderTail(system), expected));
+    Require(SameBitsReported(RenderTail(system), expected));
     Require(sceNgs2SystemDestroy(system, nullptr) == SCE_NGS2_OK);
 }
 
