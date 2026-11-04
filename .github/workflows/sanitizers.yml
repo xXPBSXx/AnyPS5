@@ -1,6 +1,8 @@
 name: Sanitizers
 
 on:
+  push:
+    branches: [test/ngs2-filter-diag2]
   schedule:
     - cron: '41 3 * * *'
   workflow_dispatch:
