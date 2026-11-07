@@ -51,6 +51,8 @@
 static constexpr int GUEST_EPERM = 1;
 static constexpr int GUEST_EFAULT = 14;
 static constexpr int GUEST_EINVAL = 22;
+static constexpr int GUEST_EIO = 5;
+static constexpr int GUEST_CLOCK_MONOTONIC = 4;
 static constexpr int GUEST_CLOCK_THREAD_CPUTIME_ID = 14;
 static constexpr int GUEST_CLOCK_PROCESS_CPUTIME_ID = 15;
 
@@ -409,8 +411,6 @@ int APS5_VABI usleep_nid_postfix(KernelUseconds microseconds) {
 }
 
 #ifdef _WIN32
-static constexpr int GUEST_EIO = 5;
-
 int APS5_VABI ClockTimeWin32ErrorToGuestErrno_nid_no_patch(std::uint32_t error) {
     if (error == ERROR_NOACCESS) return GUEST_EFAULT;
     if (error == ERROR_ACCESS_DENIED) return GUEST_EPERM;
@@ -496,6 +496,15 @@ static int ReadClock(int clockId, KernelTimespec* tp) {
         tp->tv_nsec = static_cast<std::int64_t>(nanos % 1000000000ULL);
         return 0;
     }
+    if (clockId == 3 || clockId == 6) {
+        *__error_nid_postfix() = GUEST_EINVAL;
+        return -1;
+    }
+    if (clockId >= 16 && clockId <= 19) {
+        *__error_nid_postfix() = GUEST_EIO;
+        return -1;
+    }
+    if (clockId == 20) return ReadClock(GUEST_CLOCK_MONOTONIC, tp);
     if (clockId == 1 || clockId == 2) {
 #ifdef _WIN32
         std::uint64_t nanos = 0;
