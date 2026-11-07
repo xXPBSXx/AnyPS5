@@ -86,14 +86,8 @@ static void OmittedTimeIsFaultAfterClockValidation() {
         Require(clock_gettime_nid_postfix(clockId, nullptr) == -1 && *__error_nid_postfix() == 14);
         Require(sceKernelClockGettime(clockId, nullptr) == fault);
     }
-    bool rejected = false;
-    try {
-        clock_gettime_nid_postfix(3, nullptr);
-
-    } catch (const std::runtime_error&) {
-        rejected = true;
-    }
-    Require(rejected);
+    *__error_nid_postfix() = 0;
+    Require(clock_gettime_nid_postfix(3, nullptr) == -1 && *__error_nid_postfix() == 22);
     Require(sceKernelClockGettime(3, nullptr) == fault);
     Require(sceKernelClockGettime(21, nullptr) == fault);
 }
@@ -132,6 +126,28 @@ static std::int64_t ResolutionNanos(int clockId) {
     Require(sceKernelClockGetres(clockId, &sceResolution) == SCE_OK);
     Require(sceResolution.tv_sec == resolution.tv_sec && sceResolution.tv_nsec == resolution.tv_nsec);
     return resolution.tv_nsec;
+}
+
+static void ConsoleClockIdsReturnTheirMeasuredErrors() {
+    struct Expected {
+        int clockId;
+        int guestErrno;
+    };
+    constexpr Expected rejected[] = {{3, 22}, {6, 22}, {16, 5}, {17, 5}, {18, 5}, {19, 5}};
+    for (const Expected& expected : rejected) {
+        KernelTimespec time{-1, -1};
+        *__error_nid_postfix() = 0;
+        Require(clock_gettime_nid_postfix(expected.clockId, &time) == -1 && *__error_nid_postfix() == expected.guestErrno);
+        Require(time.tv_sec == -1 && time.tv_nsec == -1);
+        time = {-1, -1};
+        Require(sceKernelClockGettime(expected.clockId, &time) == static_cast<int>(0x80020000u | static_cast<unsigned>(expected.guestErrno)));
+        Require(time.tv_sec == -1 && time.tv_nsec == -1);
+    }
+    constexpr int clockIdAcceptedByConsole = 20;
+    const KernelTimespec time = Read(clockIdAcceptedByConsole);
+    KernelTimespec sceTime{-1, -1};
+    Require(sceKernelClockGettime(clockIdAcceptedByConsole, &sceTime) == SCE_OK);
+    Require(sceTime.tv_sec >= time.tv_sec && sceTime.tv_nsec >= 0 && sceTime.tv_nsec < NANOS_PER_SECOND);
 }
 
 static void RequireNeverDecreases(int clockId) {
@@ -362,6 +378,7 @@ int main() {
     UnsupportedResolutionStillThrows();
     OmittedTimeIsFaultAfterClockValidation();
     InvalidClockIdFailsGettime();
+    ConsoleClockIdsReturnTheirMeasuredErrors();
     SettimeIsRefusedLikeAJailedProcess();
     CalendarConversionsInitializeTheirState();
     CalendarConversionsFollowTheHostZone();
