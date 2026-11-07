@@ -130,6 +130,14 @@ static void CheckNearbyint() {
     Require(nearbyint_nid_postfix(INFINITY) == INFINITY && nearbyint_nid_postfix(-INFINITY) == -INFINITY);
     Require(std::isnan(nearbyint_nid_postfix(NAN)));
     Require(std::fetestexcept(FE_INEXACT) != 0);
+    for (const auto& [input, expected] : {std::pair{0xff800001u, 0xffc00001u}, std::pair{0x7f800001u, 0x7fc00001u}}) {
+        std::feclearexcept(FE_ALL_EXCEPT);
+        Require(std::bit_cast<std::uint32_t>(nearbyintf_nid_postfix(std::bit_cast<float>(input))) == expected);
+        Require(std::fetestexcept(FE_INVALID) != 0);
+    }
+    std::feclearexcept(FE_ALL_EXCEPT);
+    Require(std::bit_cast<std::uint32_t>(nearbyintf_nid_postfix(std::bit_cast<float>(0x7fc00000u))) == 0x7fc00000u);
+    Require(std::fetestexcept(FE_INVALID) == 0);
     std::feclearexcept(FE_ALL_EXCEPT);
     std::uint16_t savedControl;
     asm volatile("fnstcw %0" : "=m"(savedControl));
