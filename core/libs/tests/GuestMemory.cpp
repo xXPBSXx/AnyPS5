@@ -171,6 +171,11 @@ static void CheckPageTableStats() {
 
 static void CheckInternalMemoryAvailableSize() {
     Require(sceKernelInternalMemoryGetAvailableSize(nullptr) == -1);
+    for (const std::size_t preset : {static_cast<std::size_t>(0), static_cast<std::size_t>(0xaaaaaaaaaaaaaaaaull)}) {
+        std::size_t size = preset;
+        Require(sceKernelInternalMemoryGetAvailableSize(&size) == -2);
+        Require(size == preset);
+    }
 }
 
 static void CheckNamedAndHintedMappings() {
